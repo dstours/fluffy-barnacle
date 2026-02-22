@@ -45,6 +45,10 @@ class Config:
         # Advanced settings
         'dns_proxy': False,
         'verbose': False,
+
+        # Cloudflare Worker settings
+        'cloudflare_api_token': '',
+        'cloudflare_account_id': '',
     }
 
     def __init__(self, config_dir: Optional[Path] = None, config_file: Optional[Path] = None):
@@ -89,6 +93,8 @@ class Config:
             'DNS_PROXY': ('dns_proxy', lambda x: x.lower() in ('true', '1', 'yes')),
             'VERBOSE': ('verbose', lambda x: x.lower() in ('true', '1', 'yes')),
             'NUM_PROXIES': ('num_proxies', int),
+            'CLOUDFLARE_API_TOKEN': ('cloudflare_api_token', str),
+            'CLOUDFLARE_ACCOUNT_ID': ('cloudflare_account_id', str),
         }
 
         for env_var, (config_key, converter) in env_mappings.items():

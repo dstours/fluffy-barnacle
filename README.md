@@ -63,6 +63,7 @@ cs-serve file payload.bin                               # serve a file
 cs-serve redirect http://169.254.169.254/metadata/      # SSRF redirect
 cs-serve custom 9999 '{"pwned":true}' application/json  # custom response
 cs-serve capture                                        # capture POST data
+cs-serve -d dev.example.com file payload.bin            # custom domain via Cloudflare
 ```
 
 ### WireGuard VPN

@@ -147,7 +147,34 @@ cs-serve list
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-c`, `--codespace` | Codespace name | auto-select |
+| `-d`, `--domain` | Custom domain via Cloudflare Worker | none |
 | `-v`, `--verbose` | Verbose output | off |
+
+## Custom Domain via Cloudflare Worker
+
+Use the `-d` flag to proxy traffic through a Cloudflare Worker on your own domain, making served content accessible via a clean URL instead of the `*.app.github.dev` URL.
+
+```bash
+cs-serve -d dev.example.com file payload.bin
+cs-serve -d dev.example.com capture
+cs-serve -d dev.example.com redirect http://internal:8080/
+```
+
+### Auto-deploy mode
+
+Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` environment variables. The worker is deployed automatically and torn down on `Ctrl+C`.
+
+```bash
+export CLOUDFLARE_API_TOKEN="your-api-token"
+export CLOUDFLARE_ACCOUNT_ID="your-account-id"
+cs-serve -d dev.example.com file payload.bin
+# → Worker deployed, both URLs shown
+# → Ctrl+C tears down worker automatically
+```
+
+### Manual mode
+
+Without credentials, cs-serve generates a `worker.js` file and prints setup instructions for the Cloudflare dashboard.
 
 ## How It Works
 

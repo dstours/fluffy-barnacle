@@ -116,6 +116,7 @@ def main_serve(argv=None):
         description='GitHub Codespaces File Server - serve files with public URLs',
     )
     parser.add_argument('-c', '--codespace', help='Codespace name to use')
+    parser.add_argument('-d', '--domain', help='Custom domain via Cloudflare Worker')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
 
     subparsers = parser.add_subparsers(dest='command', help='Serve mode')

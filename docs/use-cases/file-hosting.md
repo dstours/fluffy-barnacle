@@ -95,6 +95,21 @@ cs-serve capture
 # Press Ctrl+C to stop and download all captures locally
 ```
 
+## Custom Domain via Cloudflare
+
+Proxy through a Cloudflare Worker to serve content on your own domain:
+
+```bash
+# Auto-deploy (with CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID set)
+cs-serve -d dev.example.com file payload.bin
+cs-serve -d dev.example.com capture
+
+# Without credentials, generates worker.js for manual deployment
+cs-serve -d dev.example.com redirect http://internal:8080/
+```
+
+The worker is automatically torn down when you press `Ctrl+C`.
+
 ## Real-Time Logging
 
 All servers log incoming requests to stdout in real time. This is useful for:

