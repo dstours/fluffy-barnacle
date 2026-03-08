@@ -200,6 +200,7 @@ OPTIONS:
     -n, --num-proxies  Number of codespaces to create (1-2, default: 1)
     -c, --codespace    Codespace name to use
     -l, --location     Region for new Codespace: EastUs, WestUs2, WestEurope, SouthEastAsia
+                       Repeat for multiple codespaces: -l WestEurope -l EastUs
     -v, --verbose      Enable verbose output
 
 EXAMPLES:

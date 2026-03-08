@@ -222,10 +222,14 @@ def _ensure_codespaces(config: Config, gh: GitHubManager, count: int) -> list:
     for name in names:
         logger.info(f"Using existing codespace: {name}")
 
+    locations = config.locations
     while len(names) < count:
-        logger.info(f"Creating codespace {len(names)+1}/{count}...")
+        idx = len(names)
+        location = locations[idx] if idx < len(locations) else (locations[0] if locations else '')
+        logger.info(f"Creating codespace {idx+1}/{count}"
+                    + (f" in {location}" if location else "") + "...")
         selector = CodespaceSelector(gh, config)
-        name = selector._create_and_wait(CodespaceSelector.BLANK_REPO)
+        name = selector._create_and_wait(CodespaceSelector.BLANK_REPO, location=location)
         names.append(name)
 
     return names

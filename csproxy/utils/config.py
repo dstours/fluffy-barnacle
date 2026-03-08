@@ -51,7 +51,7 @@ class Config:
         'cloudflare_account_id': '',
 
         # Codespace creation settings
-        'location': '',
+        'locations': [],
     }
 
     def __init__(self, config_dir: Optional[Path] = None, config_file: Optional[Path] = None):
@@ -98,7 +98,7 @@ class Config:
             'NUM_PROXIES': ('num_proxies', int),
             'CLOUDFLARE_API_TOKEN': ('cloudflare_api_token', str),
             'CLOUDFLARE_ACCOUNT_ID': ('cloudflare_account_id', str),
-            'LOCATION': ('location', str),
+            'LOCATIONS': ('locations', lambda x: [v.strip() for v in x.split(',') if v.strip()]),
         }
 
         for env_var, (config_key, converter) in env_mappings.items():
@@ -279,9 +279,15 @@ class Config:
         return self._config['verbose']
 
     @property
+    def locations(self) -> list:
+        """Get preferred Codespace creation locations."""
+        return self._config.get('locations', [])
+
+    @property
     def location(self) -> str:
-        """Get preferred Codespace creation location."""
-        return self._config.get('location', '')
+        """Get first preferred location, or empty string if none set."""
+        locs = self.locations
+        return locs[0] if locs else ''
 
 
 def create_example_config(config_file: Path) -> None:
