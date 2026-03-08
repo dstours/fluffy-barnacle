@@ -33,6 +33,9 @@ def main_proxy(argv=None):
     parser.add_argument('-n', '--num-proxies', type=int, default=1,
                         help='Number of codespaces to create (1-2, default: 1)')
     parser.add_argument('-c', '--codespace', help='Codespace name to use')
+    parser.add_argument('-l', '--location',
+                        choices=['EastUs', 'WestUs2', 'WestEurope', 'SouthEastAsia'],
+                        help='Region for new Codespace creation: EastUs, WestUs2, WestEurope, SouthEastAsia')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('-h', '--help', action='store_true', help='Show help and exit')
     parser.add_argument('command', nargs='?', default='help', help='Command to run')
@@ -55,6 +58,8 @@ def main_proxy(argv=None):
     config.set('num_proxies', parsed.num_proxies)
     if parsed.codespace:
         config.set('codespace_name', parsed.codespace)
+    if parsed.location:
+        config.set('location', parsed.location)
     if parsed.verbose:
         config.set('verbose', True)
 

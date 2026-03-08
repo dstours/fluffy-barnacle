@@ -49,6 +49,9 @@ class Config:
         # Cloudflare Worker settings
         'cloudflare_api_token': '',
         'cloudflare_account_id': '',
+
+        # Codespace creation settings
+        'location': '',
     }
 
     def __init__(self, config_dir: Optional[Path] = None, config_file: Optional[Path] = None):
@@ -95,6 +98,7 @@ class Config:
             'NUM_PROXIES': ('num_proxies', int),
             'CLOUDFLARE_API_TOKEN': ('cloudflare_api_token', str),
             'CLOUDFLARE_ACCOUNT_ID': ('cloudflare_account_id', str),
+            'LOCATION': ('location', str),
         }
 
         for env_var, (config_key, converter) in env_mappings.items():
@@ -273,6 +277,11 @@ class Config:
     def verbose(self) -> bool:
         """Get verbose logging setting."""
         return self._config['verbose']
+
+    @property
+    def location(self) -> str:
+        """Get preferred Codespace creation location."""
+        return self._config.get('location', '')
 
 
 def create_example_config(config_file: Path) -> None:

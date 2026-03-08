@@ -24,6 +24,13 @@ class CodespaceSelector:
     DEFAULT_MACHINE = "standardLinux32gb"
     READY_TIMEOUT_SECS = 180  # 60 attempts x 3s each
 
+    LOCATIONS = [
+        ('EastUs',        'US East'),
+        ('WestUs2',       'US West'),
+        ('WestEurope',    'Europe West'),
+        ('SouthEastAsia', 'Southeast Asia'),
+    ]
+
     def __init__(self, gh: GitHubManager, config: Config):
         self.gh = gh
         self.config = config
@@ -51,7 +58,19 @@ class CodespaceSelector:
         """Prompt user for repo and create a new Codespace."""
         print(f"\nEnter repository (owner/repo, or press Enter for {self.BLANK_REPO}):")
         repo = input("> ").strip() or self.BLANK_REPO
-        return self._create_and_wait(repo)
+
+        location = self.config.location
+        if not location:
+            print("\nSelect region (or press Enter for no preference):")
+            for i, (value, label) in enumerate(self.LOCATIONS, 1):
+                print(f"  {i}) {value:<16} ({label})")
+            choice = input("> ").strip()
+            if choice.isdigit():
+                idx = int(choice) - 1
+                if 0 <= idx < len(self.LOCATIONS):
+                    location = self.LOCATIONS[idx][0]
+
+        return self._create_and_wait(repo, location=location)
 
     def _get_machine_types(self, repo: str) -> list:
         """Query available machine types for a repository."""
@@ -64,9 +83,11 @@ class CodespaceSelector:
             return result.stdout.strip().split()
         return [self.DEFAULT_MACHINE, 'standardLinux32gb', 'basicLinux32gb']
 
-    def _create_and_wait(self, repo: str) -> str:
+    def _create_and_wait(self, repo: str, location: str = '') -> str:
         """Create a Codespace and wait until it's available."""
-        self.logger.info(f"Creating Codespace from {repo} (this may take a minute)...")
+        location = location or self.config.location
+        loc_display = f" in {location}" if location else ""
+        self.logger.info(f"Creating Codespace from {repo}{loc_display} (this may take a minute)...")
 
         machine_types = self._get_machine_types(repo)
         self.logger.debug(f"Available machine types: {machine_types}")
@@ -74,6 +95,8 @@ class CodespaceSelector:
         result = None
         for machine in machine_types:
             args = ['codespace', 'create', '-R', repo, '-m', machine]
+            if location:
+                args += ['-l', location]
             result = self.gh.run_gh_command(args, check=False)
             if result.returncode == 0:
                 break
