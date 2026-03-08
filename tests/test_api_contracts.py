@@ -7,6 +7,7 @@ Run before and after any refactoring step.
 """
 
 import pytest
+from unittest.mock import patch, MagicMock
 
 
 def test_csproxy_package_exports():
@@ -142,3 +143,40 @@ def test_wireguard_setup_script_renders():
     )
     assert '#!/usr/bin/env bash' in rendered
     assert 'TEST_KEY=' in rendered
+
+
+def test_health_check_uses_socks5_hostname():
+    """health_check() must use --socks5-hostname to resolve DNS via proxy (issue #5)."""
+    from csproxy.proxy import SSHTunnel
+    from csproxy.utils import Config
+
+    tunnel = SSHTunnel(Config(), 'test-codespace')
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+
+    with patch('subprocess.run', return_value=mock_result) as mock_run:
+        result = tunnel.health_check()
+
+    args = mock_run.call_args[0][0]
+    assert '--socks5-hostname' in args
+    assert '--socks5' not in args
+    assert result is True
+
+
+def test_get_exit_ip_uses_socks5_hostname():
+    """get_exit_ip() must use --socks5-hostname to resolve DNS via proxy (issue #5)."""
+    from csproxy.proxy import SSHTunnel
+    from csproxy.utils import Config
+
+    tunnel = SSHTunnel(Config(), 'test-codespace')
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = '1.2.3.4'
+
+    with patch('subprocess.run', return_value=mock_result) as mock_run:
+        ip = tunnel.get_exit_ip()
+
+    args = mock_run.call_args[0][0]
+    assert '--socks5-hostname' in args
+    assert '--socks5' not in args
+    assert ip == '1.2.3.4'
