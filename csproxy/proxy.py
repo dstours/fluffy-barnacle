@@ -248,9 +248,14 @@ def cmd_start(args, config: Config, gh: GitHubManager) -> int:
         names = _ensure_codespaces(config, gh, num_proxies)
         codespace = names[0]
         config.set('codespace_name', codespace)
+        config.set('codespace_names', names)
         logger.info(f"Created {len(names)} codespace(s), proxying through: {codespace}")
+        for i, name in enumerate(names):
+            suffix = " (active tunnel)" if i == 0 else " (standby)"
+            logger.info(f"  {name}{suffix}")
     else:
         codespace = _get_codespace(config, gh)
+        config.set('codespace_names', [codespace])
 
     selector = CodespaceSelector(gh, config)
     selector.ensure_running(codespace)
@@ -391,12 +396,49 @@ def cmd_split(args, config: Config, gh: GitHubManager) -> int:
     return 0
 
 
+def _pick_codespace(args, config: Config, gh: GitHubManager) -> str:
+    """
+    Resolve which codespace to target from args or interactive menu.
+
+    Resolution order:
+      1. args[0] is a digit  → index into codespace_names
+      2. args[0] is a string → use directly as codespace name
+      3. Multiple managed codespaces → show numbered menu
+      4. Fallback                    → _get_codespace (active / selector)
+    """
+    names = config.codespace_names
+
+    if args:
+        arg = args[0]
+        if arg.isdigit():
+            idx = int(arg) - 1
+            if 0 <= idx < len(names):
+                return names[idx]
+            raise ValueError(f"No codespace at index {arg}. "
+                             f"Tracked: {len(names)} ({', '.join(names)})")
+        return arg  # treat as explicit name
+
+    if len(names) > 1:
+        print("\nSelect Codespace:")
+        for i, name in enumerate(names, 1):
+            role = " [active]" if name == config.codespace_name else " [standby]"
+            print(f"  {i}) {name}{role}")
+        choice = input("> ").strip()
+        if choice.isdigit():
+            idx = int(choice) - 1
+            if 0 <= idx < len(names):
+                return names[idx]
+        print("Invalid selection, using active codespace")
+
+    return _get_codespace(config, gh)
+
+
 def cmd_ssh(args, config: Config, gh: GitHubManager) -> int:
     """Open interactive SSH session in Codespace."""
     check_dependencies(['gh', 'ssh'])
     gh.check_auth()
 
-    codespace = _get_codespace(config, gh)
+    codespace = _pick_codespace(args, config, gh)
     selector = CodespaceSelector(gh, config)
     selector.ensure_running(codespace)
 
@@ -435,7 +477,7 @@ def cmd_name(args, config: Config, gh: GitHubManager) -> int:
 
 
 def cmd_teardown(args, config: Config, gh: GitHubManager) -> int:
-    """Stop proxy and Codespace (saves compute, keeps storage)."""
+    """Stop proxy and all managed Codespaces (saves compute, keeps storage)."""
     logger = get_logger()
     check_dependencies(['gh'])
     gh.check_auth()
@@ -443,13 +485,14 @@ def cmd_teardown(args, config: Config, gh: GitHubManager) -> int:
     tunnel = SSHTunnel(config, config.codespace_name or '')
     tunnel.stop()
 
-    codespace = config.codespace_name
-    if codespace:
-        logger.info(f"Stopping Codespace: {codespace}")
-        gh.run_gh_command(
-            ['codespace', 'stop', '--codespace', codespace], check=False
-        )
-        logger.info("Codespace stopped (still exists, no compute billing)")
+    all_names = config.codespace_names or ([config.codespace_name] if config.codespace_name else [])
+    if all_names:
+        for name in all_names:
+            logger.info(f"Stopping Codespace: {name}")
+            gh.run_gh_command(
+                ['codespace', 'stop', '--codespace', name], check=False
+            )
+        logger.info(f"Stopped {len(all_names)} codespace(s) (still exist, no compute billing)")
     else:
         logger.warning("No Codespace configured. Use: gh codespace stop -c <name>")
 
@@ -506,7 +549,9 @@ def cmd_delete(args, config: Config, gh: GitHubManager) -> int:
     for name in to_delete:
         gh.delete_codespace(name, force=True)
 
-    config.set('codespace_name', '')
+    remaining = [n for n in config.codespace_names if n not in to_delete]
+    config.set('codespace_name', remaining[0] if remaining else '')
+    config.set('codespace_names', remaining)
     config.save()
     return 0
 

@@ -52,6 +52,9 @@ class Config:
 
         # Codespace creation settings
         'locations': [],
+
+        # Tracked managed codespaces (all names, not just the active tunnel)
+        'codespace_names': [],
     }
 
     def __init__(self, config_dir: Optional[Path] = None, config_file: Optional[Path] = None):
@@ -288,6 +291,11 @@ class Config:
         """Get first preferred location, or empty string if none set."""
         locs = self.locations
         return locs[0] if locs else ''
+
+    @property
+    def codespace_names(self) -> list:
+        """Get all managed Codespace names."""
+        return self._config.get('codespace_names', [])
 
 
 def create_example_config(config_file: Path) -> None:

@@ -113,7 +113,7 @@ def show_status(config: Config, gh) -> None:
     # Show all codespaces
     import json
     result = gh.run_gh_command(
-        ['codespace', 'list', '--json', 'name,state'], check=False
+        ['codespace', 'list', '--json', 'name,state,location'], check=False
     )
     codespaces = []
     try:
@@ -122,13 +122,21 @@ def show_status(config: Config, gh) -> None:
         pass
 
     active = config.codespace_name
+    managed = set(config.codespace_names)
     if codespaces:
         print(f"\nCodespaces:")
         for cs in codespaces:
             name = cs.get('name', '')
             state = cs.get('state', 'unknown')
-            marker = " (active)" if name == active else ""
-            print(f"  {name:<45} {state}{marker}")
+            location = cs.get('location', '')
+            if name == active:
+                role = " [active tunnel]"
+            elif name in managed:
+                role = " [standby]"
+            else:
+                role = ""
+            loc_str = f"  {location}" if location else ""
+            print(f"  {name:<45} {state:<12}{loc_str}{role}")
     elif active:
         print(f"\nCodespace:       {active}")
 
@@ -171,7 +179,7 @@ COMMANDS:
     restart         Restart the proxy tunnel
     status          Show proxy and Codespace status
 
-    ssh             Open interactive shell in Codespace
+    ssh [n|name]    Open interactive shell in Codespace (menu if multiple)
     run <cmd>       Run a command in the Codespace
     name            Print the current Codespace name
 
