@@ -179,7 +179,7 @@ class SSHTunnel:
             [
                 'curl', '-s',
                 '--connect-timeout', str(timeout),
-                '--socks5', f'127.0.0.1:{self.config.socks_port}',
+                '--socks5-hostname', f'127.0.0.1:{self.config.socks_port}',
                 'https://ifconfig.me'
             ],
             capture_output=True,
@@ -193,7 +193,7 @@ class SSHTunnel:
             [
                 'curl', '-s',
                 '--connect-timeout', '5',
-                '--socks5', f'127.0.0.1:{self.config.socks_port}',
+                '--socks5-hostname', f'127.0.0.1:{self.config.socks_port}',
                 'https://ifconfig.me'
             ],
             capture_output=True,
