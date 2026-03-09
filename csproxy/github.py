@@ -274,7 +274,7 @@ class GitHubManager:
             subprocess.CalledProcessError: If start fails
         """
         self.logger.info(f"Starting Codespace: {name}")
-        self.run_gh_command(['codespace', 'start', '--codespace', name])
+        self.run_gh_command(['api', f'/user/codespaces/{name}/start', '-X', 'POST'])
 
     def stop_codespace(self, name: str) -> None:
         """

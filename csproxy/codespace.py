@@ -143,7 +143,7 @@ class CodespaceSelector:
                 return
             elif state == 'Shutdown':
                 self.logger.info("Starting Codespace...")
-                self.gh.run_gh_command(['codespace', 'start', '--codespace', name], check=False)
+                self.gh.run_gh_command(['api', f'/user/codespaces/{name}/start', '-X', 'POST'], check=False)
             else:
                 self.logger.debug(f"Codespace state: {state}")
 
@@ -192,7 +192,7 @@ class CodespaceSelector:
             return
         elif state in ('Shutdown', 'Starting'):
             self.logger.info("Starting Codespace...")
-            self.gh.run_gh_command(['codespace', 'start', '--codespace', name])
+            self.gh.run_gh_command(['api', f'/user/codespaces/{name}/start', '-X', 'POST'])
             time.sleep(10)
         elif state == 'NotFound':
             raise RuntimeError(f"Codespace '{name}' not found")
