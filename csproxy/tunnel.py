@@ -73,15 +73,20 @@ class SSHTunnel:
 
         gh_cmd = ['gh', 'codespace', 'ssh', '--codespace', self.codespace_name] + ssh_args
 
-        # Route gh's HTTPS connections through upstream SOCKS proxy for chaining.
-        # gh codespace ssh uses a local gRPC agent (loopback) for SSH relay —
-        # set NO_PROXY so those loopback calls are never sent to the SOCKS proxy,
-        # which would try to reach 127.0.0.1 on the remote codespace instead.
+        # Route gh's API calls through the upstream SOCKS proxy for chaining.
+        # Only HTTPS_PROXY — not ALL_PROXY — because gh codespace ssh spawns a
+        # local vsls-agent that makes its own outbound WebSocket connection to
+        # GitHub's SSH relay using its own transport, not Go's net/http.
+        # Setting ALL_PROXY causes vsls-agent to proxy that relay connection
+        # through our SOCKS5 tunnel, which it can't handle, crashing the agent
+        # and closing the local gRPC channel with "use of closed network connection".
+        # NO_PROXY for loopback ensures the gRPC channel between gh and the agent
+        # is never sent to the proxy either.
         env = os.environ.copy()
         if self.upstream_socks_port:
             proxy_url = f'socks5h://127.0.0.1:{self.upstream_socks_port}'
             env['HTTPS_PROXY'] = proxy_url
-            env['ALL_PROXY'] = proxy_url
+            env['https_proxy'] = proxy_url
             env['NO_PROXY'] = '127.0.0.1,localhost,::1'
             env['no_proxy'] = '127.0.0.1,localhost,::1'
 
