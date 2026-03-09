@@ -275,7 +275,9 @@ def cmd_start(args, config: Config, gh: GitHubManager) -> int:
                 upstream_socks_port=upstream_port,
                 pid_suffix=str(i + 1),
             )
-            chained_tunnel.start()
+            # Chained tunnels need extra time: gh's connections are routed
+            # through the upstream SOCKS proxy before the relay is contacted
+            chained_tunnel.start(start_timeout=90)
 
     ProxychainsConfig.generate(config)
     print_usage_examples(config)

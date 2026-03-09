@@ -40,9 +40,14 @@ class SSHTunnel:
         self.log_file = config.config_dir / f'proxy{pid_suffix}.log'
         self._process: Optional[subprocess.Popen] = None
 
-    def start(self) -> None:
+    def start(self, start_timeout: int = 30) -> None:
         """
         Start SSH tunnel with SOCKS5 forwarding and auto-reconnect.
+
+        Args:
+            start_timeout: Seconds to wait for SOCKS5 listener to become healthy.
+                           Chained tunnels need more time because gh's connections
+                           are routed through the upstream tunnel first (default: 30).
 
         Raises:
             SSHTunnelError: If tunnel cannot be established
@@ -86,18 +91,22 @@ class SSHTunnel:
         else:
             self._run_windows_background(gh_cmd, env)
 
-        self.logger.info("Waiting for tunnel to establish...")
-        deadline = time.time() + 30
+        self.logger.info(f"Waiting for tunnel to establish (timeout: {start_timeout}s)...")
+        deadline = time.time() + start_timeout
+        attempt = 0
         while time.time() < deadline:
             time.sleep(3)
+            attempt += 1
             if not self.is_running():
                 raise SSHTunnelError("Tunnel process exited immediately - check logs")
+            self.logger.debug(f"Health check attempt {attempt} on port {self.port}...")
             if self.health_check():
                 break
         else:
             self.stop()
             raise SSHTunnelError(
-                f"Tunnel started but proxy is not responding on port {self.port}"
+                f"Tunnel not responding on port {self.port} after {start_timeout}s "
+                f"— check logs: {self.log_file}"
             )
 
         self.logger.info("SOCKS5 proxy started successfully")
