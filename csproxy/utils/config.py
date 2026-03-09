@@ -55,6 +55,9 @@ class Config:
 
         # Tracked managed codespaces (all names, not just the active tunnel)
         'codespace_names': [],
+
+        # Proxy chaining: route tunnel N's SSH through tunnel N-1's SOCKS port
+        'chain': False,
     }
 
     def __init__(self, config_dir: Optional[Path] = None, config_file: Optional[Path] = None):
@@ -296,6 +299,11 @@ class Config:
     def codespace_names(self) -> list:
         """Get all managed Codespace names."""
         return self._config.get('codespace_names', [])
+
+    @property
+    def chain(self) -> bool:
+        """Get proxy chaining setting."""
+        return bool(self._config.get('chain', False))
 
 
 def create_example_config(config_file: Path) -> None:

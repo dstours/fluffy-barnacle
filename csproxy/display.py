@@ -98,14 +98,28 @@ def show_status(config: Config, gh) -> None:
     else:
         print("Proxy Status:    STOPPED")
 
+    all_names = config.codespace_names or ([config.codespace_name] if config.codespace_name else [])
+    num_tunnels = len(all_names)
+
     if proxy_running:
-        tunnel = SSHTunnel(config, config.codespace_name)
-        if tunnel.health_check():
-            exit_ip = tunnel.get_exit_ip()
-            print(f"Proxy Health:    HEALTHY")
-            print(f"Proxied IP:      {exit_ip or 'unknown'}")
+        if num_tunnels > 1 and config.chain:
+            print(f"\nTunnels:")
+            for i, name in enumerate(all_names):
+                port = config.socks_port + i
+                t = SSHTunnel(config, name, port=port, pid_suffix=('' if i == 0 else str(i + 1)))
+                healthy = t.health_check()
+                exit_ip = t.get_exit_ip() if healthy else 'unreachable'
+                role = "[primary]" if i == 0 else f"[chained via :{config.socks_port + i - 1}]"
+                health_str = "HEALTHY" if healthy else "UNHEALTHY"
+                print(f"  :{port}  {health_str:<10}  {exit_ip or 'unknown':<16}  {name}  {role}")
         else:
-            print(f"Proxy Health:    UNHEALTHY")
+            tunnel = SSHTunnel(config, config.codespace_name)
+            if tunnel.health_check():
+                exit_ip = tunnel.get_exit_ip()
+                print(f"Proxy Health:    HEALTHY")
+                print(f"Proxied IP:      {exit_ip or 'unknown'}")
+            else:
+                print(f"Proxy Health:    UNHEALTHY")
 
     print(f"SOCKS5 Port:     {config.socks_port}")
     print(f"HTTP Port:       {config.http_proxy_port}")
@@ -209,6 +223,7 @@ OPTIONS:
     -c, --codespace    Codespace name to use
     -l, --location     Region for new Codespace: EastUs, WestUs2, WestEurope, SouthEastAsia
                        Repeat for multiple codespaces: -l WestEurope -l EastUs
+    --chain            Chain tunnels: each tunnel's SSH routes through the previous one
     -v, --verbose      Enable verbose output
 
 EXAMPLES:

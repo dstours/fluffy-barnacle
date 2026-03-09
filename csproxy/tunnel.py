@@ -26,13 +26,18 @@ class SSHTunnel:
     using exponential backoff, mirroring the subshell loop in cs-proxy.sh.
     """
 
-    def __init__(self, config: Config, codespace_name: str):
+    def __init__(self, config: Config, codespace_name: str, *,
+                 port: Optional[int] = None,
+                 upstream_socks_port: Optional[int] = None,
+                 pid_suffix: str = ''):
         self.config = config
         self.codespace_name = codespace_name
+        self.port = port or config.socks_port
+        self.upstream_socks_port = upstream_socks_port
         self.logger = get_logger()
-        self.pid_file = config.config_dir / 'proxy.pid'
-        self.stop_file = config.config_dir / 'proxy.pid.stop'
-        self.log_file = config.config_dir / 'proxy.log'
+        self.pid_file = config.config_dir / f'proxy{pid_suffix}.pid'
+        self.stop_file = config.config_dir / f'proxy{pid_suffix}.pid.stop'
+        self.log_file = config.config_dir / f'proxy{pid_suffix}.log'
         self._process: Optional[subprocess.Popen] = None
 
     def start(self) -> None:
@@ -46,14 +51,15 @@ class SSHTunnel:
             self.logger.warning(f"Proxy already running (PID: {self._read_pid()})")
             return
 
-        self.logger.info(f"Starting SOCKS5 proxy on port {self.config.socks_port}...")
+        chain_note = f" (via socks5://127.0.0.1:{self.upstream_socks_port})" if self.upstream_socks_port else ""
+        self.logger.info(f"Starting SOCKS5 proxy on port {self.port}{chain_note}...")
 
         if self.stop_file.exists():
             self.stop_file.unlink()
 
         ssh_args = [
             '--',
-            '-D', f'127.0.0.1:{self.config.socks_port}',
+            '-D', f'127.0.0.1:{self.port}',
             '-N',
             '-o', 'ServerAliveInterval=30',
             '-o', 'ServerAliveCountMax=3',
@@ -62,16 +68,23 @@ class SSHTunnel:
 
         gh_cmd = ['gh', 'codespace', 'ssh', '--codespace', self.codespace_name] + ssh_args
 
+        # Route gh's HTTPS connections through upstream SOCKS proxy for chaining
+        env = os.environ.copy()
+        if self.upstream_socks_port:
+            proxy_url = f'socks5h://127.0.0.1:{self.upstream_socks_port}'
+            env['HTTPS_PROXY'] = proxy_url
+            env['ALL_PROXY'] = proxy_url
+
         pid = os.fork() if hasattr(os, 'fork') else None
 
         if pid is not None:
             if pid == 0:
-                self._run_with_reconnect(gh_cmd)
+                self._run_with_reconnect(gh_cmd, env)
                 sys.exit(0)
             else:
                 self._write_pid(pid)
         else:
-            self._run_windows_background(gh_cmd)
+            self._run_windows_background(gh_cmd, env)
 
         self.logger.info("Waiting for tunnel to establish...")
         deadline = time.time() + 30
@@ -84,13 +97,13 @@ class SSHTunnel:
         else:
             self.stop()
             raise SSHTunnelError(
-                f"Tunnel started but proxy is not responding on port {self.config.socks_port}"
+                f"Tunnel started but proxy is not responding on port {self.port}"
             )
 
         self.logger.info("SOCKS5 proxy started successfully")
-        self.logger.info(f"  Local endpoint: socks5://127.0.0.1:{self.config.socks_port}")
+        self.logger.info(f"  Local endpoint: socks5://127.0.0.1:{self.port}{chain_note}")
 
-    def _run_with_reconnect(self, gh_cmd: list) -> None:
+    def _run_with_reconnect(self, gh_cmd: list, env: Optional[dict] = None) -> None:
         """Run SSH tunnel with exponential backoff reconnect."""
         delay = self.config.reconnect_delay
 
@@ -105,6 +118,7 @@ class SSHTunnel:
                     gh_cmd,
                     stdout=log_fd,
                     stderr=log_fd,
+                    env=env,
                 )
 
             if self.stop_file.exists():
@@ -121,12 +135,12 @@ class SSHTunnel:
             time.sleep(delay)
             delay = min(delay * 2, self.config.max_reconnect_delay)
 
-    def _run_windows_background(self, gh_cmd: list) -> None:
+    def _run_windows_background(self, gh_cmd: list, env: Optional[dict] = None) -> None:
         """Start tunnel in background thread on Windows (no fork available)."""
         import threading
 
         def run():
-            self._run_with_reconnect(gh_cmd)
+            self._run_with_reconnect(gh_cmd, env)
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
@@ -153,7 +167,7 @@ class SSHTunnel:
 
         try:
             subprocess.run(
-                ['pkill', '-f', f'gh codespace ssh.*-D.*{self.config.socks_port}'],
+                ['pkill', '-f', f'gh codespace ssh.*-D.*{self.port}'],
                 capture_output=True
             )
         except FileNotFoundError:
@@ -179,7 +193,7 @@ class SSHTunnel:
             [
                 'curl', '-s',
                 '--connect-timeout', str(timeout),
-                '--socks5-hostname', f'127.0.0.1:{self.config.socks_port}',
+                '--socks5-hostname', f'127.0.0.1:{self.port}',
                 'https://ifconfig.me'
             ],
             capture_output=True,
@@ -193,7 +207,7 @@ class SSHTunnel:
             [
                 'curl', '-s',
                 '--connect-timeout', '5',
-                '--socks5-hostname', f'127.0.0.1:{self.config.socks_port}',
+                '--socks5-hostname', f'127.0.0.1:{self.port}',
                 'https://ifconfig.me'
             ],
             capture_output=True,

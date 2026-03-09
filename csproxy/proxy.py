@@ -262,6 +262,21 @@ def cmd_start(args, config: Config, gh: GitHubManager) -> int:
     tunnel = SSHTunnel(config, codespace)
     tunnel.start()
 
+    # Start chained tunnels for any additional codespaces
+    if config.chain and len(config.codespace_names) > 1:
+        for i, name in enumerate(config.codespace_names[1:], 1):
+            chained_port = config.socks_port + i
+            upstream_port = config.socks_port + i - 1
+            logger.info(f"Starting chained tunnel {i+1}: port {chained_port} via port {upstream_port}")
+            selector.ensure_running(name)
+            chained_tunnel = SSHTunnel(
+                config, name,
+                port=chained_port,
+                upstream_socks_port=upstream_port,
+                pid_suffix=str(i + 1),
+            )
+            chained_tunnel.start()
+
     ProxychainsConfig.generate(config)
     print_usage_examples(config)
 
@@ -273,6 +288,10 @@ def cmd_stop(args, config: Config, gh: GitHubManager) -> int:
     """Stop proxy tunnel."""
     tunnel = SSHTunnel(config, config.codespace_name or '')
     tunnel.stop()
+
+    # Stop any chained tunnels
+    for i in range(1, len(config.codespace_names)):
+        SSHTunnel(config, '', port=config.socks_port + i, pid_suffix=str(i + 1)).stop()
 
     http = HTTPProxyManager(config)
     http.stop()
