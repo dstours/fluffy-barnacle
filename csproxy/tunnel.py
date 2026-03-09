@@ -69,26 +69,30 @@ class SSHTunnel:
             '-o', 'ServerAliveInterval=30',
             '-o', 'ServerAliveCountMax=3',
             '-o', 'ExitOnForwardFailure=yes',
+            # Disable ControlMaster so concurrent tunnels to different codespaces
+            # don't share the same relay socket (all codespaces use the same SSH
+            # relay hostname, e.g. vs-ssh.github.dev).  Without this, the second
+            # tunnel hangs waiting to multiplex over the first tunnel's socket.
+            '-o', 'ControlMaster=no',
+            '-o', 'ControlPath=none',
         ]
 
         gh_cmd = ['gh', 'codespace', 'ssh', '--codespace', self.codespace_name] + ssh_args
 
-        # Route gh's API calls through the upstream SOCKS proxy for chaining.
-        # Only HTTPS_PROXY — not ALL_PROXY — because gh codespace ssh spawns a
-        # local vsls-agent that makes its own outbound WebSocket connection to
-        # GitHub's SSH relay using its own transport, not Go's net/http.
-        # Setting ALL_PROXY causes vsls-agent to proxy that relay connection
-        # through our SOCKS5 tunnel, which it can't handle, crashing the agent
-        # and closing the local gRPC channel with "use of closed network connection".
-        # NO_PROXY for loopback ensures the gRPC channel between gh and the agent
-        # is never sent to the proxy either.
+        # gh codespace ssh spawns a vsls-agent subprocess that makes its own
+        # outbound relay connection to GitHub.  Any HTTP/HTTPS proxy env var
+        # (HTTPS_PROXY, ALL_PROXY, etc.) inherited by the agent causes it to
+        # try routing its relay connection through the proxy, which it cannot
+        # handle, crashing the agent with:
+        #   "error getting ssh server details: failed to invoke SSH RPC:
+        #    error reading server preface: use of closed network connection"
+        # Strip all proxy vars from the environment so both tunnels establish
+        # reliably via the same direct path that tunnel 1 uses.
         env = os.environ.copy()
         if self.upstream_socks_port:
-            proxy_url = f'socks5h://127.0.0.1:{self.upstream_socks_port}'
-            env['HTTPS_PROXY'] = proxy_url
-            env['https_proxy'] = proxy_url
-            env['NO_PROXY'] = '127.0.0.1,localhost,::1'
-            env['no_proxy'] = '127.0.0.1,localhost,::1'
+            for var in ('HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy',
+                        'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy'):
+                env.pop(var, None)
 
         pid = os.fork() if hasattr(os, 'fork') else None
 
