@@ -66,11 +66,25 @@ sudo cs-wg up
 sudo cs-wg route add 10.0.0.0/8
 ```
 
+## Two Proxies, Different Exit IPs
+
+```bash
+cs-proxy -n 2 start -l WestEurope -l EastUs
+# Tunnel 1: socks5://127.0.0.1:1080  (WestEurope)
+# Tunnel 2: socks5://127.0.0.1:1081  (EastUs)
+
+curl --socks5-hostname 127.0.0.1:1080 https://ifconfig.me
+curl --socks5-hostname 127.0.0.1:1081 https://ifconfig.me
+cs-proxy status     # health + exit IP per tunnel
+cs-proxy ssh        # numbered menu to pick which codespace to shell into
+```
+
 ## Stop
 
 ```bash
-cs-proxy stop          # stop the proxy tunnel
-cs-proxy teardown      # delete the Codespace entirely
+cs-proxy stop          # stop all proxy tunnels
+cs-proxy down          # stop tunnels + shut down all managed codespaces
+cs-proxy delete        # permanently delete codespace(s)
 ```
 
 ## Next Steps

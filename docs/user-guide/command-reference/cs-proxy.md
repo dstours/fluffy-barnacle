@@ -17,15 +17,16 @@ cs-proxy <command> [options]
 Start a SOCKS5 proxy tunnel to a Codespace.
 
 ```bash
-cs-proxy start
-cs-proxy start -c my-codespace-name
-cs-proxy start -p 9050
-cs-proxy -n 2 start                  # create 2 codespaces, proxy through first
+cs-proxy start                                # auto-select or create one codespace
+cs-proxy start -c my-codespace-name          # use a specific codespace
+cs-proxy start -p 9050                       # use a non-default port
+cs-proxy -n 2 start                          # two codespaces, two tunnels (1080 + 1081)
+cs-proxy -n 2 start -l WestEurope -l EastUs  # pin each to a specific region
 ```
 
-Starts an SSH tunnel with SOCKS5 dynamic port forwarding. The tunnel runs in the background with automatic reconnection using exponential backoff.
+Starts an SSH tunnel with SOCKS5 dynamic port forwarding on `127.0.0.1:<port>`. The tunnel runs in the background with automatic reconnection using exponential backoff.
 
-When `-n` is greater than 1, creates multiple codespaces and uses the first one as the active proxy. The extra codespace is available as a spare for manual rotation via `cs-proxy set`.
+When `-n 2` is used, a second codespace is created (or reused) and a second independent tunnel is started on the next port (`socks_port + 1`). Each tunnel has a different exit IP. Use `-l` once per codespace to pin each to a region: `EastUs`, `WestUs2`, `WestEurope`, `SouthEastAsia`.
 
 #### `stop`
 
@@ -50,6 +51,8 @@ Show tunnel status, Codespace state, and exit IP.
 ```bash
 cs-proxy status
 ```
+
+When multiple codespaces are tracked, shows each tunnel's port, health, and exit IP side by side.
 
 ### HTTP Proxy
 
@@ -128,10 +131,11 @@ cs-proxy create
 
 #### `teardown` / `down`
 
-Delete the current Codespace.
+Stop the proxy tunnel(s) and shut down all managed Codespaces (compute stops, storage is preserved — no billing).
 
 ```bash
-cs-proxy teardown
+cs-proxy teardown     # stops all tunnels and all tracked codespaces
+cs-proxy down         # alias
 ```
 
 #### `name`
@@ -147,10 +151,12 @@ cs-proxy name my-codespace       # set
 
 #### `ssh`
 
-Open an SSH session to the Codespace.
+Open an SSH session to a Codespace.
 
 ```bash
-cs-proxy ssh
+cs-proxy ssh          # auto-selects; shows numbered menu if multiple codespaces tracked
+cs-proxy ssh 2        # connect to the second tracked codespace by index
+cs-proxy ssh my-cs    # connect to a specific codespace by name
 ```
 
 #### `run`
@@ -190,6 +196,7 @@ cs-proxy logs
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-p`, `--port` | SOCKS5 proxy port | `1080` |
-| `-n`, `--num-proxies` | Number of codespaces to create (max 2) | `1` |
+| `-n`, `--num-proxies` | Number of codespaces/tunnels (max 2); each gets its own port | `1` |
 | `-c`, `--codespace` | Codespace name | auto-select |
+| `-l`, `--location` | Region for new Codespace: `EastUs`, `WestUs2`, `WestEurope`, `SouthEastAsia`. Repeat for multiple: `-l WestEurope -l EastUs` | none |
 | `-v`, `--verbose` | Verbose output | off |

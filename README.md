@@ -61,8 +61,10 @@ See the [Quick Start Guide](https://dstours.github.io/fluffy-barnacle/quickstart
 ### SOCKS5 Proxy with Auto-Reconnect
 
 ```bash
-cs-proxy start
-cs-proxy status             # codespace state + exit IP
+cs-proxy start                                # single proxy, auto-select codespace
+cs-proxy -n 2 start -l WestEurope -l EastUs  # two proxies, different regions (ports 1080 + 1081)
+cs-proxy status             # codespace state + per-tunnel exit IP
+cs-proxy ssh                # interactive shell (menu if multiple codespaces tracked)
 cs-proxy env                # export statements for tools that read env vars
 cs-proxy burp               # upstream proxy config for Burp Suite
 ```
@@ -140,8 +142,9 @@ Config file: `~/.config/cs-proxy/config.yaml`
 ```yaml
 socks_port: 1080
 http_proxy_port: 8080
-num_proxies: 1              # 1-2; how many codespaces to create
+num_proxies: 1              # 1-2; starts a tunnel through each on consecutive ports
 codespace_name: ""
+locations: []               # e.g. [WestEurope, EastUs] — one region per codespace
 reconnect_delay: 5
 max_reconnect_delay: 300
 verbose: false

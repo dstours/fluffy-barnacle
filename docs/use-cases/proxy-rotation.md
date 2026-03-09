@@ -2,22 +2,26 @@
 
 Rotate your egress IP by cycling GitHub Codespaces. Each Codespace gets a fresh IP from GitHub's Azure infrastructure.
 
-## Pre-Create Multiple Codespaces
+## Two Simultaneous Proxies
 
-Create 2 codespaces upfront so you have a spare ready for quick switching:
-
-```bash
-cs-proxy -n 2 start
-```
-
-This creates 2 codespaces and proxies through the first one. To switch to the other:
+Run two independent tunnels at once, each with a different exit IP:
 
 ```bash
-cs-proxy list                 # see available codespaces
-cs-proxy set <other-name>     # switch active codespace
-cs-proxy restart              # reconnect through the new one
-cs-tools ipcheck              # verify different exit IP
+cs-proxy -n 2 start -l WestEurope -l EastUs
 ```
+
+This creates two codespaces in different regions and starts a tunnel through each:
+
+- `socks5://127.0.0.1:1080` → WestEurope codespace
+- `socks5://127.0.0.1:1081` → EastUs codespace
+
+```bash
+curl --socks5-hostname 127.0.0.1:1080 https://ifconfig.me   # EU exit IP
+curl --socks5-hostname 127.0.0.1:1081 https://ifconfig.me   # US exit IP
+cs-proxy status   # shows health and exit IP for each tunnel
+```
+
+Route specific tools to one or the other by setting the SOCKS5 proxy endpoint explicitly, or configure Burp Suite / proxychains to use whichever suits the target.
 
 ## Manual Rotation
 

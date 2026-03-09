@@ -10,10 +10,12 @@ cs-proxy uses a YAML configuration file with environment variable overrides.
 # Proxy settings
 socks_port: 1080
 http_proxy_port: 8080
-num_proxies: 1              # 1-2; how many codespaces to create
+num_proxies: 1              # 1-2; each codespace gets its own tunnel on consecutive ports
 
 # Codespace settings
 codespace_name: ""          # blank = interactive selection
+locations: []               # e.g. [WestEurope, EastUs] — one region per codespace
+                            # valid: EastUs, WestUs2, WestEurope, SouthEastAsia
 
 # Connection settings
 reconnect_delay: 5          # initial reconnect delay (seconds)
@@ -48,8 +50,9 @@ All settings can be overridden via environment variables:
 |----------|-----------|---------|-------------|
 | `SOCKS_PORT` | `socks_port` | `1080` | SOCKS5 proxy listen port |
 | `HTTP_PROXY_PORT` | `http_proxy_port` | `8080` | HTTP proxy listen port |
-| `NUM_PROXIES` | `num_proxies` | `1` | Number of codespaces to create (max 2) |
+| `NUM_PROXIES` | `num_proxies` | `1` | Number of codespaces/tunnels (max 2) |
 | `CODESPACE_NAME` | `codespace_name` | `""` | Target Codespace name |
+| `LOCATIONS` | `locations` | `[]` | Comma-separated regions, e.g. `WestEurope,EastUs` |
 | `RECONNECT_DELAY` | `reconnect_delay` | `5` | Initial reconnect delay (s) |
 | `MAX_RECONNECT_DELAY` | `max_reconnect_delay` | `300` | Max reconnect delay (s) |
 | `DNS_PROXY` | `dns_proxy` | `false` | Route DNS through proxy |
