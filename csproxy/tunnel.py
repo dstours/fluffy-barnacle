@@ -28,12 +28,10 @@ class SSHTunnel:
 
     def __init__(self, config: Config, codespace_name: str, *,
                  port: Optional[int] = None,
-                 upstream_socks_port: Optional[int] = None,
                  pid_suffix: str = ''):
         self.config = config
         self.codespace_name = codespace_name
         self.port = port or config.socks_port
-        self.upstream_socks_port = upstream_socks_port
         self.logger = get_logger()
         self.pid_file = config.config_dir / f'proxy{pid_suffix}.pid'
         self.stop_file = config.config_dir / f'proxy{pid_suffix}.pid.stop'
@@ -45,9 +43,9 @@ class SSHTunnel:
         Start SSH tunnel with SOCKS5 forwarding and auto-reconnect.
 
         Args:
-            start_timeout: Seconds to wait for SOCKS5 listener to become healthy.
-                           Chained tunnels need more time because gh's connections
-                           are routed through the upstream tunnel first (default: 30).
+            start_timeout: Seconds to wait for the SOCKS5 listener to become healthy.
+                           Additional tunnels use 90s since gh may take longer to
+                           establish concurrent SSH relay sessions (default: 30).
 
         Raises:
             SSHTunnelError: If tunnel cannot be established
@@ -56,8 +54,7 @@ class SSHTunnel:
             self.logger.warning(f"Proxy already running (PID: {self._read_pid()})")
             return
 
-        chain_note = f" (via socks5://127.0.0.1:{self.upstream_socks_port})" if self.upstream_socks_port else ""
-        self.logger.info(f"Starting SOCKS5 proxy on port {self.port}{chain_note}...")
+        self.logger.info(f"Starting SOCKS5 proxy on port {self.port}...")
 
         if self.stop_file.exists():
             self.stop_file.unlink()
@@ -79,20 +76,7 @@ class SSHTunnel:
 
         gh_cmd = ['gh', 'codespace', 'ssh', '--codespace', self.codespace_name] + ssh_args
 
-        # gh codespace ssh spawns a vsls-agent subprocess that makes its own
-        # outbound relay connection to GitHub.  Any HTTP/HTTPS proxy env var
-        # (HTTPS_PROXY, ALL_PROXY, etc.) inherited by the agent causes it to
-        # try routing its relay connection through the proxy, which it cannot
-        # handle, crashing the agent with:
-        #   "error getting ssh server details: failed to invoke SSH RPC:
-        #    error reading server preface: use of closed network connection"
-        # Strip all proxy vars from the environment so both tunnels establish
-        # reliably via the same direct path that tunnel 1 uses.
         env = os.environ.copy()
-        if self.upstream_socks_port:
-            for var in ('HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy',
-                        'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy'):
-                env.pop(var, None)
 
         pid = os.fork() if hasattr(os, 'fork') else None
 
@@ -124,7 +108,7 @@ class SSHTunnel:
             )
 
         self.logger.info("SOCKS5 proxy started successfully")
-        self.logger.info(f"  Local endpoint: socks5://127.0.0.1:{self.port}{chain_note}")
+        self.logger.info(f"  Local endpoint: socks5://127.0.0.1:{self.port}")
 
     def _run_with_reconnect(self, gh_cmd: list, env: Optional[dict] = None) -> None:
         """Run SSH tunnel with exponential backoff reconnect."""

@@ -38,8 +38,6 @@ def main_proxy(argv=None):
                         choices=['EastUs', 'WestUs2', 'WestEurope', 'SouthEastAsia'],
                         help='Region for new Codespace: EastUs, WestUs2, WestEurope, SouthEastAsia'
                              ' (repeat for multiple: -l WestEurope -l EastUs)')
-    parser.add_argument('--chain', action='store_true',
-                        help='Chain tunnels: route each tunnel\'s SSH through the previous one')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
     parser.add_argument('-h', '--help', action='store_true', help='Show help and exit')
     parser.add_argument('command', nargs='?', default='help', help='Command to run')
@@ -64,8 +62,6 @@ def main_proxy(argv=None):
         config.set('codespace_name', parsed.codespace)
     if parsed.locations:
         config.set('locations', parsed.locations)
-    if parsed.chain:
-        config.set('chain', True)
     if parsed.verbose:
         config.set('verbose', True)
 
