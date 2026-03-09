@@ -73,12 +73,17 @@ class SSHTunnel:
 
         gh_cmd = ['gh', 'codespace', 'ssh', '--codespace', self.codespace_name] + ssh_args
 
-        # Route gh's HTTPS connections through upstream SOCKS proxy for chaining
+        # Route gh's HTTPS connections through upstream SOCKS proxy for chaining.
+        # gh codespace ssh uses a local gRPC agent (loopback) for SSH relay —
+        # set NO_PROXY so those loopback calls are never sent to the SOCKS proxy,
+        # which would try to reach 127.0.0.1 on the remote codespace instead.
         env = os.environ.copy()
         if self.upstream_socks_port:
             proxy_url = f'socks5h://127.0.0.1:{self.upstream_socks_port}'
             env['HTTPS_PROXY'] = proxy_url
             env['ALL_PROXY'] = proxy_url
+            env['NO_PROXY'] = '127.0.0.1,localhost,::1'
+            env['no_proxy'] = '127.0.0.1,localhost,::1'
 
         pid = os.fork() if hasattr(os, 'fork') else None
 
