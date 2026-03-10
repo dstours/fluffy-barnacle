@@ -28,6 +28,10 @@ class Config:
     default values. Supports both reading and writing configuration.
     """
 
+    # Keys removed from DEFAULTS but still accepted silently so existing
+    # config files don't produce spurious warnings after an upgrade.
+    DEPRECATED_KEYS = {'chain'}
+
     # Default configuration values
     DEFAULTS = {
         # Proxy settings
@@ -139,6 +143,8 @@ class Config:
             for key, value in loaded.items():
                 if key in self.DEFAULTS:
                     self._config[key] = value
+                elif key in self.DEPRECATED_KEYS:
+                    self.logger.debug(f"Ignoring deprecated config key: {key}")
                 else:
                     self.logger.warning(f"Unknown config key: {key}")
 
