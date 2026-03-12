@@ -242,32 +242,49 @@ def cmd_start(args, config: Config, gh: GitHubManager) -> int:
     gh.check_auth()
 
     num_proxies = min(config.get('num_proxies', 1), 2)
+    selector = CodespaceSelector(gh, config)
 
     if num_proxies > 1:
         names = _ensure_codespaces(config, gh, num_proxies)
         codespace = names[0]
         config.set('codespace_name', codespace)
         config.set('codespace_names', names)
-        logger.info(f"Created {len(names)} codespace(s)")
+        logger.info(f"Using {len(names)} codespace(s)")
         for i, name in enumerate(names):
             port = config.socks_port + i
             logger.info(f"  {name}  →  socks5://127.0.0.1:{port}")
     else:
-        codespace = _get_codespace(config, gh)
-        config.set('codespace_names', [codespace])
+        tracked = list(config.codespace_names)
 
-    selector = CodespaceSelector(gh, config)
-    selector.ensure_running(codespace)
-    tunnel = SSHTunnel(config, codespace)
-    tunnel.start()
+        if not tracked:
+            # First start: select or create a codespace
+            codespace = _get_codespace(config, gh)
+            tracked = [codespace]
+            config.set('codespace_name', codespace)
+            config.set('codespace_names', tracked)
+        else:
+            # Check if all tracked codespaces already have running tunnels
+            all_running = all(
+                SSHTunnel(config, n, port=config.socks_port + i,
+                          pid_suffix=('' if i == 0 else str(i + 1))).is_running()
+                for i, n in enumerate(tracked)
+            )
+            if all_running:
+                # All running: add another codespace and tunnel
+                logger.info("All managed Codespaces already have tunnels. Adding a new one...")
+                new_name = selector._create_interactively()
+                tracked.append(new_name)
+                config.set('codespace_names', tracked)
+            config.set('codespace_name', tracked[0])
 
-    # Start a tunnel for each additional codespace on consecutive ports
-    for i, name in enumerate(config.codespace_names[1:], 1):
-        extra_port = config.socks_port + i
-        logger.info(f"Starting tunnel {i+1} on port {extra_port}: {name}")
-        selector.ensure_running(name)
-        extra_tunnel = SSHTunnel(config, name, port=extra_port, pid_suffix=str(i + 1))
-        extra_tunnel.start(start_timeout=90)
+    # Start tunnels for any tracked codespace that isn't already running
+    for i, name in enumerate(config.codespace_names):
+        suffix = '' if i == 0 else str(i + 1)
+        port = config.socks_port + i
+        t = SSHTunnel(config, name, port=port, pid_suffix=suffix)
+        if not t.is_running():
+            selector.ensure_running(name)
+            t.start(start_timeout=30 if i == 0 else 90)
 
     ProxychainsConfig.generate(config)
     print_usage_examples(config)
@@ -330,12 +347,17 @@ def cmd_list(args, config: Config, gh: GitHubManager) -> int:
 
 
 def cmd_create(args, config: Config, gh: GitHubManager) -> int:
-    """Create a new Codespace."""
+    """Create a new Codespace and add it to the tracked list."""
     check_dependencies(['gh'])
     gh.check_auth()
 
     selector = CodespaceSelector(gh, config)
     name = selector._create_interactively()
+
+    names = list(config.codespace_names)
+    if name not in names:
+        names.append(name)
+    config.set('codespace_names', names)
     config.set('codespace_name', name)
     config.save()
     return 0

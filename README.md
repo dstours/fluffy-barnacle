@@ -62,12 +62,22 @@ See the [Quick Start Guide](https://dstours.github.io/fluffy-barnacle/quickstart
 
 ```bash
 cs-proxy start                                # single proxy, auto-select codespace
+cs-proxy start                                # (if already running) adds another codespace + tunnel
+cs-proxy create                               # create a new codespace and track it
+cs-proxy start                                # picks up unstarted tracked codespaces
 cs-proxy -n 2 start -l WestEurope -l EastUs  # two proxies, different regions (ports 1080 + 1081)
 cs-proxy status             # codespace state + per-tunnel exit IP
 cs-proxy ssh                # interactive shell (menu if multiple codespaces tracked)
 cs-proxy env                # export statements for tools that read env vars
 cs-proxy burp               # upstream proxy config for Burp Suite
 ```
+
+**Adding a second proxy:**
+
+There are two workflows for running multiple exit IPs:
+
+1. **Auto-add:** Run `cs-proxy start` again when a proxy is already running — it creates a new codespace and starts a second tunnel automatically.
+2. **Manual:** Run `cs-proxy create` to create a codespace first, then `cs-proxy start` to tunnel it (skips the first running tunnel and starts one for the new codespace).
 
 ### Public File Hosting
 

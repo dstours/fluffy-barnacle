@@ -124,14 +124,10 @@ def show_status(config: Config, gh) -> None:
     print(f"HTTP Port:       {config.http_proxy_port}")
 
     # Show all codespaces
-    import json
-    result = gh.run_gh_command(
-        ['codespace', 'list', '--json', 'name,state,location'], check=False
-    )
     codespaces = []
     try:
-        codespaces = json.loads(result.stdout) if result.stdout.strip() else []
-    except json.JSONDecodeError:
+        codespaces = gh.list_codespaces()
+    except Exception:
         pass
 
     active = config.codespace_name
@@ -141,14 +137,15 @@ def show_status(config: Config, gh) -> None:
         for cs in codespaces:
             name = cs.get('name', '')
             state = cs.get('state', 'unknown')
-            location = cs.get('location', '')
+            repo = cs.get('repository', '')
             if name in managed:
                 idx = config.codespace_names.index(name) if name in config.codespace_names else -1
                 role = f" [tunnel :{config.socks_port + idx}]" if idx >= 0 else " [managed]"
+            elif name == active:
+                role = " [active]"
             else:
                 role = ""
-            loc_str = f"  {location}" if location else ""
-            print(f"  {name:<45} {state:<12}{loc_str}{role}")
+            print(f"  {name:<45} {state:<12}  {repo}{role}")
     elif active:
         print(f"\nCodespace:       {active}")
 
