@@ -441,6 +441,7 @@ def _launch_server(gh: GitHubManager, cs_name: str, port: int,
         fwd.terminate()
         if cf_worker:
             cf_worker.teardown()
+        _ssh(gh, cs_name, f"pkill -9 -f '{script_name}' 2>/dev/null || true")
 
 
 # =============================================================================
