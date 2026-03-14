@@ -201,7 +201,8 @@ def _setup_server_environment(gh: GitHubManager, cs_name: str, port: int) -> Non
     _ssh(gh, cs_name, "mkdir -p /tmp/serve")
 
 
-def _start_port_forwarding(gh: GitHubManager, cs_name: str, port: int) -> subprocess.Popen:
+def _start_port_forwarding(gh: GitHubManager, cs_name: str, port: int,
+                           set_public: bool = True) -> subprocess.Popen:
     """
     Start port forwarding from Codespace port to local port.
 
@@ -211,6 +212,9 @@ def _start_port_forwarding(gh: GitHubManager, cs_name: str, port: int) -> subpro
         gh: GitHub manager
         cs_name: Codespace name
         port: Port to forward
+        set_public: If True, also set port visibility to public. Skip on reconnect
+                    since the port is already public and re-running the command may
+                    disrupt the existing server binding.
 
     Returns:
         Popen instance for the background port forward process
@@ -226,11 +230,12 @@ def _start_port_forwarding(gh: GitHubManager, cs_name: str, port: int) -> subpro
     )
     time.sleep(2)
 
-    # Make port public
-    gh.run_gh_command(
-        ['codespace', 'ports', 'visibility', f'{port}:public', '--codespace', cs_name],
-        check=False
-    )
+    if set_public:
+        # Make port public
+        gh.run_gh_command(
+            ['codespace', 'ports', 'visibility', f'{port}:public', '--codespace', cs_name],
+            check=False
+        )
 
     return fwd_process
 
@@ -262,7 +267,7 @@ def _verify_server_running(gh: GitHubManager, cs_name: str, process_name: str) -
     logger.info("Server started successfully")
 
 
-def _tail_remote_logs(gh: GitHubManager, cs_name: str) -> None:
+def _tail_remote_logs(gh: GitHubManager, cs_name: str, new_only: bool = False) -> None:
     """
     Stream server logs from Codespace until Ctrl+C.
 
@@ -273,11 +278,14 @@ def _tail_remote_logs(gh: GitHubManager, cs_name: str) -> None:
     Args:
         gh: GitHub manager
         cs_name: Codespace name
+        new_only: If True, use tail -n 0 to skip existing log content and only
+                  stream new lines. Used on reconnect to avoid replaying stale
+                  messages (e.g. old 'Port busy' retries) from a previous session.
     """
+    tail_cmd = 'tail -n 0 -f /tmp/serve/server.log' if new_only else 'tail -f /tmp/serve/server.log'
     try:
         subprocess.run(
-            ['gh', 'codespace', 'ssh', '--codespace', cs_name,
-             '--', 'tail -f /tmp/serve/server.log']
+            ['gh', 'codespace', 'ssh', '--codespace', cs_name, '--', tail_cmd]
         )
     except KeyboardInterrupt:
         pass  # Normal exit
@@ -416,7 +424,7 @@ def _launch_server(gh: GitHubManager, cs_name: str, port: int,
     else:
         logger.info("Reconnecting to existing server...")
 
-    fwd = _start_port_forwarding(gh, cs_name, port)
+    fwd = _start_port_forwarding(gh, cs_name, port, set_public=not reconnect)
 
     # Deploy Cloudflare Worker if domain is specified
     cf_worker = None
@@ -428,7 +436,7 @@ def _launch_server(gh: GitHubManager, cs_name: str, port: int,
     banner_fn(cs_name, port, domain=domain)
 
     try:
-        _tail_remote_logs(gh, cs_name)
+        _tail_remote_logs(gh, cs_name, new_only=reconnect)
     finally:
         fwd.terminate()
         if cf_worker:
