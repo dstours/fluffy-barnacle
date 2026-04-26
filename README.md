@@ -131,6 +131,16 @@ cs-tools phttpx -l domains.txt -title -status-code
 cs-tools pcs gobuster dir -u https://target.com -w list.txt
 ```
 
+`cs-tools` supports global flags before the tool name:
+
+```bash
+cs-tools --port 1081 pcurl https://target.com      # pin to a specific tunnel
+cs-tools --dry-run pnmap -p 80 target.com           # preview the command
+cs-tools --timeout 900 pnmap -sV -p- target.com     # override default timeout
+```
+
+`pnmap` automatically sanitizes nmap arguments — it strips incompatible flags (`-sS`, `-sU`, `-O`, `--traceroute`) and forces `-sT -Pn` to keep traffic inside the SOCKS tunnel. Running nmap as root would default to SYN scan and **leak your real IP**; `cs-tools` prevents this.
+
 ## Installation
 
 **Requirements:** Python 3.10+, [GitHub CLI](https://cli.github.com/) (`gh`), `ssh`, `curl`

@@ -58,16 +58,25 @@ See the [Architecture](architecture.md) page for a detailed module breakdown.
 To add a wrapper for a new tool, add a function in `csproxy/tools.py`:
 
 ```python
-def pnewtool(args: List[str] = None, config: Config = None) -> int:
+def pnewtool(
+    args: List[str],
+    host: str = '127.0.0.1',
+    port: Optional[int] = None,
+    *,
+    timeout: Optional[int] = 300,
+) -> int:
     """Run newtool through the SOCKS5 proxy."""
-    config = config or Config()
-    if not check_proxy(port=config.socks_port):
+    config = Config()
+    port = port or _get_proxy_port(config)
+    if not check_proxy(host, port):
         return 1
-    cmd = ['proxychains4', '-f', _proxychains_conf(config), 'newtool'] + (args or [])
-    return subprocess.run(cmd).returncode
+    return subprocess.run(
+        ['newtool', '--proxy', f'socks5://{host}:{port}'] + args,
+        timeout=timeout,
+    ).returncode
 ```
 
-Then add it to the `TOOLS` dict and export it from `__init__.py`.
+Then add it to `TOOL_COMMANDS` and export it from `__init__.py`.
 
 ## Building Documentation
 

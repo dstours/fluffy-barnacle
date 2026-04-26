@@ -33,6 +33,10 @@ Each tool can be used from the CLI or imported directly as a [Python library](de
 - **Shell completion** — Bash and zsh completion via `cs-proxy completion bash`
 - **PAC file generation** — `cs-proxy pac` outputs a Proxy Auto-Config script for browser routing
 - **Status watch mode** — `cs-proxy status --watch` auto-refreshes every 2 seconds
+- **cs-tools global flags** — `--port`, `--host`, `--dry-run`, and `--timeout` work across all wrappers
+- **nmap sanitization** — `pnmap` strips incompatible flags (`-sS`, `-sU`, `-O`) and warns about root/SYN-scan IP leakage
+- **Health check caching** — `cs-tools` caches proxy health for 5 seconds instead of checking on every invocation
+- **Unified proxy env** — Tools with native proxy support automatically get `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`
 
 ## Getting Started
 

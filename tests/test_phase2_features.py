@@ -14,7 +14,7 @@ These tests verify the UX improvements added in Phase 2:
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -458,3 +458,165 @@ def test_status_watch_flag_dispatches_to_watch_status():
         result = cmd_status(["--watch"], config, gh)
     assert result == 0
     mock_watch.assert_called_once()
+
+
+# =============================================================================
+# cs-tools improvements (Phase 2 follow-up)
+# =============================================================================
+
+
+def test_check_proxy_caches_result():
+    """check_proxy should cache the result for 5 seconds."""
+    from csproxy.tools import check_proxy, _CHECK_CACHE
+
+    # Clear cache
+    _CHECK_CACHE.clear()
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+
+    with patch('subprocess.run', return_value=mock_result) as mock_run:
+        result1 = check_proxy('127.0.0.1', 1080, _bypass_cache=True)
+        result2 = check_proxy('127.0.0.1', 1080)
+        result3 = check_proxy('127.0.0.1', 1080)
+
+    assert result1 is True
+    assert result2 is True
+    assert result3 is True
+    # First call does subprocess.run, next two hit cache
+    assert mock_run.call_count == 1
+
+
+def test_check_proxy_bypass_cache():
+    """_bypass_cache=True should always hit subprocess."""
+    from csproxy.tools import check_proxy, _CHECK_CACHE
+
+    _CHECK_CACHE.clear()
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+
+    with patch('subprocess.run', return_value=mock_result) as mock_run:
+        check_proxy('127.0.0.1', 1080)
+        check_proxy('127.0.0.1', 1080, _bypass_cache=True)
+
+    assert mock_run.call_count == 2
+
+
+def test_proxy_env_sets_variables():
+    """_proxy_env returns dict with SOCKS5 proxy variables."""
+    from csproxy.tools import _proxy_env
+
+    env = _proxy_env('127.0.0.1', 1080)
+    assert env['ALL_PROXY'] == 'socks5h://127.0.0.1:1080'
+    assert env['HTTP_PROXY'] == 'socks5h://127.0.0.1:1080'
+    assert env['HTTPS_PROXY'] == 'socks5h://127.0.0.1:1080'
+    assert env['SOCKS_PROXY'] == 'socks5h://127.0.0.1:1080'
+
+
+def test_sanitize_nmap_args_removes_invalid_scans():
+    """_sanitize_nmap_args strips scan types that don't work through SOCKS."""
+    from csproxy.tools import _sanitize_nmap_args
+
+    args = ['-sS', '-p', '80', '-sU', '-O', '--traceroute', '--scanflags', 'URG', 'target.com']
+    with patch('os.geteuid', return_value=1000):
+        result = _sanitize_nmap_args(args)
+
+    assert '-sS' not in result
+    assert '-sU' not in result
+    assert '-O' not in result
+    assert '--traceroute' not in result
+    assert '--scanflags' not in result
+    assert 'URG' not in result
+    assert '-sT' in result
+    assert '-Pn' in result
+    assert 'target.com' in result
+    assert '-p' in result
+    assert '80' in result
+
+
+def test_sanitize_nmap_args_adds_required_flags():
+    """_sanitize_nmap_args prepends -sT and -Pn when missing."""
+    from csproxy.tools import _sanitize_nmap_args
+
+    with patch('os.geteuid', return_value=1000):
+        result = _sanitize_nmap_args(['target.com'])
+
+    assert result[0] == '-Pn'
+    assert result[1] == '-sT'
+
+
+def test_sanitize_nmap_args_adds_max_parallelism():
+    """_sanitize_nmap_args adds --max-parallelism 10 when not present."""
+    from csproxy.tools import _sanitize_nmap_args
+
+    with patch('os.geteuid', return_value=1000):
+        result = _sanitize_nmap_args(['target.com'])
+
+    assert '--max-parallelism' in result
+    assert result[result.index('--max-parallelism') + 1] == '10'
+
+
+def test_sanitize_nmap_args_respects_existing_max_parallelism():
+    """_sanitize_nmap_args does not override existing --max-parallelism."""
+    from csproxy.tools import _sanitize_nmap_args
+
+    with patch('os.geteuid', return_value=1000):
+        result = _sanitize_nmap_args(['--max-parallelism', '5', 'target.com'])
+
+    idx = result.index('--max-parallelism')
+    assert result[idx + 1] == '5'
+
+
+def test_main_tools_help():
+    """main_tools(['help']) returns 0."""
+    from csproxy.tools import main_tools
+    assert main_tools(['help']) == 0
+
+
+def test_main_tools_no_args():
+    """main_tools([]) returns 0 (shows help)."""
+    from csproxy.tools import main_tools
+    assert main_tools([]) == 0
+
+
+def test_main_tools_dry_run():
+    """--dry-run prints command without executing."""
+    from csproxy.tools import main_tools
+
+    with patch('builtins.print') as mock_print:
+        result = main_tools(['--dry-run', 'pcurl', 'https://example.com'])
+    assert result == 0
+    printed = ' '.join(str(c[0][0]) for c in mock_print.call_args_list)
+    assert '[dry-run]' in printed
+
+
+def test_main_tools_unknown_tool():
+    """main_tools returns 1 for unknown tool."""
+    from csproxy.tools import main_tools
+    assert main_tools(['notatool']) == 1
+
+
+def test_main_tools_timeout_passed_to_wrapper():
+    """--timeout is forwarded to the tool wrapper."""
+    from csproxy.tools import main_tools
+
+    mock_pcurl = MagicMock(return_value=0)
+    with patch.dict('csproxy.tools.TOOL_COMMANDS', {'pcurl': ('pcurl', mock_pcurl)}):
+        with patch('csproxy.tools.check_proxy', return_value=True):
+            main_tools(['--timeout', '99', 'pcurl', 'https://example.com'])
+
+    mock_pcurl.assert_called_once()
+    kwargs = mock_pcurl.call_args[1]
+    assert kwargs['timeout'] == 99
+
+
+def test_pcs_command_not_found():
+    """pcs returns 127 when the wrapped command does not exist."""
+    from csproxy.tools import pcs
+
+    with patch('shutil.which', return_value=None):
+        with patch('csproxy.tools.check_proxy', return_value=True):
+            result = pcs(['nonexistent', 'arg'])
+
+    assert result == 127

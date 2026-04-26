@@ -7,7 +7,28 @@ Each wrapper checks that cs-proxy is running before executing and exits with a w
 ## Usage
 
 ```
-cs-tools <tool> [tool-specific args]
+cs-tools [options] <tool> [tool-specific args]
+```
+
+### Global Options
+
+| Option | Description |
+|--------|-------------|
+| `--port PORT` | Override the SOCKS5 proxy port |
+| `--host HOST` | Override the proxy host (default: `127.0.0.1`) |
+| `--dry-run` | Print the command that would run without executing it |
+| `--timeout SECS` | Override the default command timeout |
+| `-h`, `--help` | Show help |
+
+```bash
+# Preview what nmap command would be executed
+cs-tools --dry-run pnmap -p 80,443 target.com
+
+# Use a specific proxy port
+cs-tools --port 1081 pcurl https://target.com
+
+# Extend timeout for a slow scan
+cs-tools --timeout 900 pnmap -p- target.com
 ```
 
 ## Tools
@@ -50,7 +71,9 @@ cs-tools pnmap -p 80,443,8080 target.com
 cs-tools pnmap -sV -p 1-1000 target.com
 ```
 
-Uses proxychains with `-sT` (TCP connect) since SYN scans can't go through SOCKS.
+**Automatic sanitization:** `pnmap` removes incompatible flags (`-sS`, `-sU`, `-O`, `--traceroute`, `--scanflags`) and forces `-sT -Pn`. It also adds `--max-parallelism 10` to prevent overloading the proxy.
+
+> ⚠️ **Security warning:** Running nmap as root defaults to SYN scan (`-sS`), which **bypasses the SOCKS proxy and leaks your real IP**. `cs-tools` forces TCP connect scan (`-sT`) to keep all traffic inside the tunnel.
 
 ### `pnuclei`
 

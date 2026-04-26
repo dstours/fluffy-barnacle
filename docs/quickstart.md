@@ -60,6 +60,18 @@ cs-tools pnmap -p 80,443 target.com
 cs-tools pffuf -u https://target.com/FUZZ -w wordlist.txt
 ```
 
+Preview a command before running it:
+
+```bash
+cs-tools --dry-run pnmap -p 80,443 target.com
+```
+
+Pin to a specific tunnel port:
+
+```bash
+cs-tools --port 1081 pcurl https://target.com
+```
+
 ### Monitor tunnel health
 
 ```bash
@@ -101,6 +113,7 @@ Preview actions without making changes:
 ```bash
 cs-proxy --dry-run start     # show what would start
 cs-proxy --dry-run stop      # show what would stop
+cs-tools --dry-run pnmap -p 80 target.com   # preview the nmap command
 ```
 
 ## Stop

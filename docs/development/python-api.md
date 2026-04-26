@@ -70,11 +70,14 @@ if check_proxy():
     # Show IP comparison
     ipcheck()
 
-    # curl through proxy
+    # curl through proxy (default 30s timeout)
     pcurl(['https://ifconfig.me'])
 
-    # nmap scan
+    # nmap scan — incompatible flags (-sS, -sU, -O) are auto-removed
     pnmap(['-p', '80,443', 'target.com'])
+
+    # Override timeout for a slow scan
+    pnmap(['-sV', '-p-', 'target.com'], timeout=900)
 ```
 
 ### Serve Files
@@ -133,4 +136,15 @@ from csproxy import check_dependencies
 # Returns True if all required tools are available
 if check_dependencies():
     print("All dependencies satisfied")
+```
+
+### Unified Proxy Environment
+
+For tools with native proxy support, build an environment dict with SOCKS5 variables:
+
+```python
+from csproxy.tools import _proxy_env
+
+env = _proxy_env('127.0.0.1', 1080)
+# env contains: ALL_PROXY, HTTP_PROXY, HTTPS_PROXY, SOCKS_PROXY
 ```

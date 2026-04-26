@@ -12,6 +12,9 @@ cs-proxy -n 2 start -l WestEurope -l EastUs
 # cs-tools will automatically distribute traffic across healthy tunnels
 cs-tools pnmap -p 80,443 target.com
 cs-tools pffuf -u https://target.com/FUZZ -w wordlist.txt
+
+# Pin a specific tool to one tunnel explicitly
+cs-tools --port 1081 pcurl https://target.com
 ```
 
 The rotation is random across healthy tunnels. If no healthy tunnels exist, tools fall back to the configured `socks_port`.
