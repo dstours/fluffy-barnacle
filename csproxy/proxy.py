@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from .github import GitHubManager
+from .state import State
 from .utils import (
     Config,
     GitHubAuthError,
@@ -547,8 +548,21 @@ def cmd_teardown(args, config: Config, gh: GitHubManager) -> int:
     check_dependencies(['gh'])
     gh.check_auth()
 
-    tunnel = SSHTunnel(config, config.codespace_name or '')
-    tunnel.stop()
+    # Clean up every tunnel in state, not just config-tracked ones
+    state = State(config.config_dir)
+    tunnels = state.get_tunnels(kind='ssh')
+    for t in tunnels:
+        port = t.get('port', config.socks_port)
+        cs_name = t.get('codespace_name', '')
+        tunnel = SSHTunnel(config, cs_name, port=port)
+        tunnel.cleanup()
+        logger.info(f"Stopped tunnel :{port}")
+
+    # Also clean up any orphaned artifacts in workers/ directory
+    workers_dir = config.config_dir / 'workers'
+    if workers_dir.exists():
+        for f in workers_dir.iterdir():
+            f.unlink(missing_ok=True)
 
     all_names = config.codespace_names or ([config.codespace_name] if config.codespace_name else [])
     if all_names:
@@ -570,11 +584,21 @@ def cmd_down(args, config: Config, gh: GitHubManager) -> int:
     check_dependencies(['gh'])
     gh.check_auth()
 
-    # Step 1: stop tunnels
-    tunnel = SSHTunnel(config, config.codespace_name or '')
-    tunnel.stop()
-    for i in range(1, len(config.codespace_names)):
-        SSHTunnel(config, '', port=config.socks_port + i, pid_suffix=str(i + 1)).stop()
+    # Step 1: aggressive cleanup of every tunnel in state
+    state = State(config.config_dir)
+    tunnels = state.get_tunnels(kind='ssh')
+    for t in tunnels:
+        port = t.get('port', config.socks_port)
+        cs_name = t.get('codespace_name', '')
+        tunnel = SSHTunnel(config, cs_name, port=port)
+        tunnel.cleanup()
+        logger.info(f"Cleaned up tunnel :{port}")
+
+    # Also clean up any orphaned artifacts in workers/ directory
+    workers_dir = config.config_dir / 'workers'
+    if workers_dir.exists():
+        for f in workers_dir.iterdir():
+            f.unlink(missing_ok=True)
 
     all_names = list(config.codespace_names) or ([config.codespace_name] if config.codespace_name else [])
     if not all_names:
@@ -605,6 +629,8 @@ def cmd_down(args, config: Config, gh: GitHubManager) -> int:
         logger.info(f"Deleting Codespace: {name}")
         gh.delete_codespace(name, force=True)
 
+    # Step 5: wipe local state and config tracking
+    state.clear_all()
     config.set('codespace_name', '')
     config.set('codespace_names', [])
     config.save()

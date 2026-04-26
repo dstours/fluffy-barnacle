@@ -193,6 +193,12 @@ class State:
             self.save(data)
         return crashed
 
+    def clear_all(self) -> None:
+        """Remove all tunnels from state."""
+        data = self.load()
+        data["tunnels"] = []
+        self.save(data)
+
     def get_tunnels(
         self, kind: Optional[str] = None, status: Optional[str] = None
     ) -> list[dict]:

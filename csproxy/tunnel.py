@@ -191,11 +191,70 @@ class SSHTunnel:
 
         self.pid_file.unlink(missing_ok=True)
         self.spec_file.unlink(missing_ok=True)
+        self.spec_file.with_suffix('.stderr').unlink(missing_ok=True)
         self.state.remove_tunnel(port=self.port)
         self.logger.info("Proxy stopped")
 
+    def cleanup(self) -> None:
+        """
+        Aggressive cleanup: kill any lingering worker, remove all artifacts,
+        and purge the state entry. Use when a tunnel is known to be stale.
+        """
+        self.logger.debug(f"Aggressive cleanup for tunnel :{self.port}")
+
+        # Try to kill by PID file
+        pid = self._read_pid()
+        if pid:
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.kill(pid, sig)
+                    time.sleep(0.2)
+                    os.kill(pid, 0)
+                except (ProcessLookupError, PermissionError):
+                    break
+
+        # Kill any process still listening on our port (last resort)
+        self._kill_port_holders()
+
+        # Remove all artifacts
+        self.pid_file.unlink(missing_ok=True)
+        self.stop_file.unlink(missing_ok=True)
+        self.spec_file.unlink(missing_ok=True)
+        self.spec_file.with_suffix('.stderr').unlink(missing_ok=True)
+        self.state.remove_tunnel(port=self.port)
+
+    def _kill_port_holders(self) -> None:
+        """Kill processes listening on our SOCKS port (platform-specific)."""
+        try:
+            if sys.platform == 'darwin':
+                # lsof -ti:port gives PIDs
+                result = subprocess.run(
+                    ['lsof', '-ti', f':{self.port}'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0:
+                    for pid_str in result.stdout.strip().splitlines():
+                        try:
+                            os.kill(int(pid_str), signal.SIGKILL)
+                        except (ValueError, ProcessLookupError, PermissionError):
+                            pass
+            elif sys.platform == 'linux':
+                result = subprocess.run(
+                    ['fuser', '-k', f'{self.port}/tcp'],
+                    capture_output=True, timeout=5
+                )
+        except Exception:
+            pass
+
     def is_running(self) -> bool:
         """Check if the tunnel process is still alive."""
+        # If state says dead/crashed, trust that over PID existence
+        # (prevents zombies where worker is alive but circuit breaker tripped)
+        state_tunnel = self.state.get_tunnel_by_port(self.port)
+        if state_tunnel and state_tunnel.get('status') in ('dead', 'crashed'):
+            self._cleanup_stale()
+            return False
+
         pid = self._read_pid()
         if not pid:
             return False
