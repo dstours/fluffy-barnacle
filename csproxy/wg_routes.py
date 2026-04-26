@@ -12,21 +12,29 @@ import subprocess
 from pathlib import Path
 
 from .utils import Config, get_logger
+from .wg_constants import WG_INTERFACE
 
-# WireGuard defaults (can be overridden via env vars)
-WG_INTERFACE = os.environ.get('WG_INTERFACE', 'cswg0')
-
-# GitHub/Azure IP ranges to bypass when routing all traffic through tunnel
+# GitHub/Azure IP ranges to bypass when routing all traffic through tunnel.
+# These keep the SSH tunnel and gh CLI alive when route_all() is active.
+# NOTE: Azure ranges change frequently. If SSH drops after route_all(),
+# add your specific region CIDR here.
 _BYPASS_ROUTES = [
-    '140.82.112.0/20',  # GitHub
-    '192.30.252.0/22',  # GitHub
-    '185.199.108.0/22', # GitHub
-    '20.0.0.0/8',       # Azure
-    '52.0.0.0/8',       # Azure
-    '51.0.0.0/8',       # Azure
-    '13.0.0.0/8',       # Azure
-    '40.0.0.0/8',       # Azure
-    '104.0.0.0/8',      # Azure
+    # GitHub (well-documented, stable)
+    '140.82.112.0/20',   # GitHub web/API
+    '192.30.252.0/22',   # GitHub pages
+    '185.199.108.0/22',  # GitHub pages
+    # Azure (narrowed from /8 to /16 for common datacenter regions)
+    '20.37.0.0/16',      # Azure East US
+    '20.38.0.0/16',      # Azure East US 2
+    '20.42.0.0/16',      # Azure West Europe
+    '20.43.0.0/16',      # Azure North Europe
+    '20.195.0.0/16',     # Azure Southeast Asia
+    '52.96.0.0/16',      # Azure West US 2
+    '52.136.0.0/16',     # Azure West Central US
+    '52.147.0.0/16',     # Azure East US
+    '52.165.0.0/16',     # Azure East US 2
+    '52.166.0.0/16',     # Azure Central US
+    '52.239.0.0/16',     # Azure North Central US
 ]
 
 

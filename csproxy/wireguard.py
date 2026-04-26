@@ -8,6 +8,8 @@ enabling full transparent proxying of all traffic.
 
 import os
 import re
+import shlex
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -31,13 +33,14 @@ from .wg_setup import (  # noqa: F401
 
 VERSION = "1.0.0"
 
-# WireGuard defaults (can be overridden via env vars)
-WG_INTERFACE = os.environ.get('WG_INTERFACE', 'cswg0')
-WG_PORT = int(os.environ.get('WG_PORT', '51820'))
-WG_LOCAL_IP = os.environ.get('WG_LOCAL_IP', '10.99.99.2/24')
-WG_REMOTE_IP = os.environ.get('WG_REMOTE_IP', '10.99.99.1/24')
-WG_NETWORK = os.environ.get('WG_NETWORK', '10.99.99.0/24')
-TCP_RELAY_PORT = 51821
+from .wg_constants import (
+    WG_INTERFACE,
+    WG_PORT,
+    WG_LOCAL_IP,
+    WG_REMOTE_IP,
+    WG_NETWORK,
+    TCP_RELAY_PORT,
+)
 
 
 def start_tunnel(config: Config, gh: GitHubManager) -> None:
@@ -90,8 +93,9 @@ def start_tunnel(config: Config, gh: GitHubManager) -> None:
     script = _build_remote_setup_script(wg_dir)
 
     # Upload setup script via stdin
+    setup_path = '/tmp/setup_wg.sh'
     gh_cmd = ['gh', 'codespace', 'ssh', '-c', cs_name, '--',
-               'cat > /tmp/setup_wg.sh && chmod +x /tmp/setup_wg.sh']
+               f'cat > {shlex.quote(setup_path)} && chmod +x {shlex.quote(setup_path)}']
     if sudo_user and os.geteuid() == 0:
         gh_cmd = ['sudo', '-u', sudo_user] + gh_cmd
 
@@ -100,7 +104,7 @@ def start_tunnel(config: Config, gh: GitHubManager) -> None:
         raise RuntimeError(f"Failed to copy setup script to codespace: "
                            f"{result.stderr.decode().strip()}")
 
-    run_cmd = ['gh', 'codespace', 'ssh', '-c', cs_name, '--', '/tmp/setup_wg.sh']
+    run_cmd = ['gh', 'codespace', 'ssh', '-c', cs_name, '--', setup_path]
     if sudo_user and os.geteuid() == 0:
         run_cmd = ['sudo', '-u', sudo_user] + run_cmd
 
@@ -108,19 +112,27 @@ def start_tunnel(config: Config, gh: GitHubManager) -> None:
     if result.returncode != 0:
         raise RuntimeError("Failed to run WireGuard setup in codespace")
 
+    # Wipe the setup script immediately after execution to avoid leaving
+    # private keys on the Codespace filesystem.
+    wipe_cmd = ['gh', 'codespace', 'ssh', '-c', cs_name, '--',
+                f'shred -u {shlex.quote(setup_path)} 2>/dev/null || rm -f {shlex.quote(setup_path)}']
+    if sudo_user and os.geteuid() == 0:
+        wipe_cmd = ['sudo', '-u', sudo_user] + wipe_cmd
+    subprocess.run(wipe_cmd, capture_output=True)
+
     time.sleep(2)
 
     # Phase 4: SSH tunnel for UDP relay
     logger.info("Setting up SSH tunnel for UDP relay...")
 
     # Kill any existing local relay processes
-    subprocess.run(['pkill', '-f', f'socat.*UDP.*{WG_PORT}'], capture_output=True)
-    subprocess.run(['pkill', '-f', f'socat.*{TCP_RELAY_PORT}'], capture_output=True)
+    subprocess.run(['pkill', '-f', f'socat.*UDP.*{shlex.quote(str(WG_PORT))}'], capture_output=True)
+    subprocess.run(['pkill', '-f', f'socat.*{shlex.quote(str(TCP_RELAY_PORT))}'], capture_output=True)
 
     # Verify remote socat is running
     logger.info("Verifying remote relay...")
     verify_cmd = ['gh', 'codespace', 'ssh', '-c', cs_name, '--',
-                  f"pgrep -f 'socat.*TCP-LISTEN.*{TCP_RELAY_PORT}' > /dev/null && echo 'relay running'"]
+                  f"pgrep -f 'socat.*TCP-LISTEN.*{shlex.quote(str(TCP_RELAY_PORT))}' > /dev/null && echo 'relay running'"]
     if sudo_user and os.geteuid() == 0:
         verify_cmd = ['sudo', '-u', sudo_user] + verify_cmd
 
@@ -130,8 +142,8 @@ def start_tunnel(config: Config, gh: GitHubManager) -> None:
     else:
         logger.warning("Remote socat may not be running, attempting to start...")
         start_socat_cmd = ['gh', 'codespace', 'ssh', '-c', cs_name, '--',
-                           f'nohup socat TCP-LISTEN:{TCP_RELAY_PORT},reuseaddr,fork '
-                           f'UDP:127.0.0.1:{WG_PORT} > /tmp/socat_relay.log 2>&1 &']
+                           f'nohup socat TCP-LISTEN:{shlex.quote(str(TCP_RELAY_PORT))},reuseaddr,fork '
+                           f'UDP:127.0.0.1:{shlex.quote(str(WG_PORT))} > /tmp/socat_relay.log 2>&1 &']
         if sudo_user and os.geteuid() == 0:
             start_socat_cmd = ['sudo', '-u', sudo_user] + start_socat_cmd
         subprocess.run(start_socat_cmd, capture_output=True)
@@ -150,7 +162,7 @@ def start_tunnel(config: Config, gh: GitHubManager) -> None:
         print("The SSH tunnel must be started as your regular user (not root).")
         print("Please run this in another terminal:")
         print()
-        print(f"  gh codespace ssh -c {cs_name} -- "
+        print(f"  gh codespace ssh -c {shlex.quote(cs_name)} -- "
               f"-T -L 127.0.0.1:{TCP_RELAY_PORT}:127.0.0.1:{TCP_RELAY_PORT} -N &")
         print()
         input("Then press Enter to continue...")
@@ -265,13 +277,14 @@ def stop_tunnel(config: Config, gh: GitHubManager) -> None:
     if socat_pid_file.exists():
         try:
             pid = int(socat_pid_file.read_text().strip())
-            os.kill(pid, 15)  # SIGTERM
+            os.kill(pid, 0)  # validate PID exists before signaling
+            os.kill(pid, signal.SIGTERM)
         except (OSError, ValueError):
             pass
         socat_pid_file.unlink(missing_ok=True)
-    subprocess.run(['pkill', '-f', f'socat.*UDP.*{WG_PORT}'], capture_output=True)
-    subprocess.run(['pkill', '-f', 'socat.*51820'], capture_output=True)
-    subprocess.run(['pkill', '-f', 'socat.*51821'], capture_output=True)
+    subprocess.run(['pkill', '-f', f'socat.*UDP.*{shlex.quote(str(WG_PORT))}'], capture_output=True)
+    subprocess.run(['pkill', '-f', f'socat.*{shlex.quote(str(WG_PORT))}'], capture_output=True)
+    subprocess.run(['pkill', '-f', f'socat.*{shlex.quote(str(TCP_RELAY_PORT))}'], capture_output=True)
 
     # Stop SSH tunnel
     logger.info("Stopping SSH tunnel...")
@@ -279,20 +292,21 @@ def stop_tunnel(config: Config, gh: GitHubManager) -> None:
     if ssh_pid_file.exists():
         try:
             pid = int(ssh_pid_file.read_text().strip())
-            os.kill(pid, 15)
+            os.kill(pid, 0)  # validate PID exists before signaling
+            os.kill(pid, signal.SIGTERM)
         except (OSError, ValueError):
             pass
         ssh_pid_file.unlink(missing_ok=True)
     subprocess.run(['pkill', '-f', 'gh.*codespace.*ssh.*-L'], capture_output=True)
-    subprocess.run(['pkill', '-f', 'ssh.*51821:127.0.0.1'], capture_output=True)
-    subprocess.run(['fuser', '-k', '51821/tcp'], capture_output=True)
+    subprocess.run(['pkill', '-f', f'ssh.*{shlex.quote(str(TCP_RELAY_PORT))}:127.0.0.1'], capture_output=True)
+    subprocess.run(['fuser', '-k', f'{shlex.quote(str(TCP_RELAY_PORT))}/tcp'], capture_output=True)
 
     # Stop remote WireGuard if codespace accessible
     if cs_name:
         logger.info(f"Cleaning up codespace ({cs_name})...")
         cleanup_cmd = ['gh', 'codespace', 'ssh', '-c', cs_name, '--',
-                       'sudo wg-quick down wg0 2>/dev/null || true; '
-                       'pkill -f \'socat.*TCP-LISTEN.*51821\' 2>/dev/null || true']
+                       f'sudo wg-quick down wg0 2>/dev/null || true; '
+                       f'pkill -f socat.*TCP-LISTEN.*{shlex.quote(str(TCP_RELAY_PORT))} 2>/dev/null || true']
         if sudo_user and os.geteuid() == 0:
             cleanup_cmd = ['sudo', '-u', sudo_user] + cleanup_cmd
         subprocess.run(cleanup_cmd, capture_output=True)

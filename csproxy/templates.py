@@ -23,7 +23,11 @@ def start_server(handler, port, retries=5):
         except OSError as e:
             if attempt < retries - 1:
                 print(f'Port {{port}} busy, killing and retrying ({{attempt+1}}/{{retries}})...', flush=True)
-                subprocess.run(f'fuser -k -9 {{port}}/tcp 2>/dev/null; lsof -ti:{{port}} | xargs kill -9 2>/dev/null', shell=True)
+                subprocess.run(['fuser', '-k', '-9', f'{{port}}/tcp'],
+                               capture_output=True)
+                subprocess.run(['sh', '-c',
+                                f'lsof -ti:{{port}} | xargs kill -9 2>/dev/null'],
+                               capture_output=True)
                 time.sleep(2)
             else:
                 raise

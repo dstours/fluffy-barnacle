@@ -7,6 +7,7 @@ Extracted from wireguard.py for modularity.
 """
 
 import os
+import shlex
 import subprocess
 import time
 from datetime import datetime
@@ -60,7 +61,8 @@ def generate_keys(wg_dir: Path) -> None:
     """
     Generate local and remote WireGuard keypairs if they don't exist.
 
-    Equivalent to generate_keys() in cs-wg.sh.
+    Keys are stored as plain text files with 0o600 permissions.
+    For production use, consider encrypting the key directory at rest.
     """
     logger = get_logger()
 
@@ -213,12 +215,13 @@ def ensure_codespace_running(cs_name: str, gh: GitHubManager,
 # Configuration Generation
 # =============================================================================
 
-# Default constants (imported by wireguard.py, used as defaults here)
-_WG_INTERFACE = os.environ.get('WG_INTERFACE', 'cswg0')
-_WG_PORT = int(os.environ.get('WG_PORT', '51820'))
-_WG_LOCAL_IP = os.environ.get('WG_LOCAL_IP', '10.99.99.2/24')
-_WG_REMOTE_IP = os.environ.get('WG_REMOTE_IP', '10.99.99.1/24')
-_WG_NETWORK = os.environ.get('WG_NETWORK', '10.99.99.0/24')
+from .wg_constants import (
+    WG_INTERFACE as _WG_INTERFACE,
+    WG_PORT as _WG_PORT,
+    WG_LOCAL_IP as _WG_LOCAL_IP,
+    WG_REMOTE_IP as _WG_REMOTE_IP,
+    WG_NETWORK as _WG_NETWORK,
+)
 
 
 def generate_local_config(wg_dir: Path, interface: str = _WG_INTERFACE,

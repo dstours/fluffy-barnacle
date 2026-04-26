@@ -12,6 +12,7 @@ import subprocess
 from typing import Optional
 
 from .utils import get_logger
+from .wg_constants import WG_INTERFACE
 
 # ANSI color codes
 _RED = '\033[31m'
@@ -20,9 +21,6 @@ _YELLOW = '\033[33m'
 _CYAN = '\033[36m'
 _WHITE = '\033[37m'
 _RESET = '\033[0m'
-
-# Default interface (can be overridden via env vars)
-WG_INTERFACE = os.environ.get('WG_INTERFACE', 'cswg0')
 
 
 def _check_root() -> None:
