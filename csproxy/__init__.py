@@ -13,6 +13,7 @@ __license__ = "MIT"
 from .github import GitHubManager
 from .codespace import CodespaceSelector
 from .proxy import ProxychainsConfig
+from .state import State
 from .tunnel import HTTPProxyManager, SSHTunnel
 from .tools import (
     check_proxy,
@@ -44,6 +45,7 @@ __all__ = [
     'HTTPProxyManager',
     'CodespaceSelector',
     'ProxychainsConfig',
+    'State',
     # Proxied tool wrappers
     'check_proxy',
     'ipcheck',
