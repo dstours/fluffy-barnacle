@@ -10,7 +10,7 @@ cs-proxy uses a YAML configuration file with environment variable overrides and 
 # Proxy settings
 socks_port: 1080
 http_proxy_port: 8080
-num_proxies: 1              # 1-5; each codespace gets its own tunnel on consecutive ports
+num_proxies: 1              # 1-2 on free tier; each gets its own tunnel on consecutive ports
 
 # Codespace settings
 codespace_name: ""          # blank = interactive selection
@@ -88,7 +88,7 @@ All settings can be overridden via environment variables:
 |----------|-----------|---------|-------------|
 | `SOCKS_PORT` | `socks_port` | `1080` | SOCKS5 proxy listen port |
 | `HTTP_PROXY_PORT` | `http_proxy_port` | `8080` | HTTP proxy listen port |
-| `NUM_PROXIES` | `num_proxies` | `1` | Number of codespaces/tunnels (1-5) |
+| `NUM_PROXIES` | `num_proxies` | `1` | Number of codespaces/tunnels (1-2 on free tier) |
 | `CODESPACE_NAME` | `codespace_name` | `""` | Target Codespace name |
 | `LOCATIONS` | `locations` | `[]` | Comma-separated regions, e.g. `WestEurope,EastUs` |
 | `RECONNECT_DELAY` | `reconnect_delay` | `5` | Initial reconnect delay (s) |

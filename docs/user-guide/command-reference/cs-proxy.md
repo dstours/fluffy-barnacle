@@ -13,7 +13,7 @@ cs-proxy [options] <command> [args]
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-p`, `--port` | SOCKS5 proxy port | `1080` |
-| `-n`, `--num-proxies` | Number of codespaces/tunnels (1-5); each gets its own port | `1` |
+| `-n`, `--num-proxies` | Number of codespaces/tunnels (1-2 on free tier); each gets its own port | `1` |
 | `-c`, `--codespace` | Codespace name | auto-select |
 | `-l`, `--location` | Region for new Codespace: `EastUs`, `WestUs2`, `WestEurope`, `SouthEastAsia`. Repeat for multiple: `-l WestEurope -l EastUs` | none |
 | `-v`, `--verbose` | Verbose output | off |

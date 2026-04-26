@@ -174,7 +174,7 @@ Config file: `~/.config/cs-proxy/config.yaml`
 ```yaml
 socks_port: 1080
 http_proxy_port: 8080
-num_proxies: 1              # 1-5; starts a tunnel through each on consecutive ports
+num_proxies: 1              # 1-2 on free tier; each gets its own tunnel on consecutive ports
 codespace_name: ""
 locations: []               # e.g. [WestEurope, EastUs] — one region per codespace
 reconnect_delay: 5
