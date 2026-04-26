@@ -69,7 +69,7 @@ def check_proxy(host: str = '127.0.0.1', port: Optional[int] = None) -> bool:
     port = port or _get_proxy_port(config)
     result = subprocess.run(
         ['curl', '-s', '--connect-timeout', '2',
-         '--socks5', f'{host}:{port}', 'https://ifconfig.me'],
+         '--socks5-hostname', f'{host}:{port}', 'https://ifconfig.me'],
         capture_output=True
     )
     if result.returncode != 0:

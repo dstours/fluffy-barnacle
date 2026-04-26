@@ -181,3 +181,19 @@ def test_get_exit_ip_uses_socks5_hostname():
     assert '--socks5-hostname' in args
     assert '--socks5' not in args
     assert ip == '1.2.3.4'
+
+
+def test_check_proxy_uses_socks5_hostname():
+    """check_proxy() must use --socks5-hostname to resolve DNS via proxy (issue #5)."""
+    from csproxy.tools import check_proxy
+
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+
+    with patch('subprocess.run', return_value=mock_result) as mock_run:
+        result = check_proxy()
+
+    args = mock_run.call_args[0][0]
+    assert '--socks5-hostname' in args
+    assert '--socks5' not in args
+    assert result is True
