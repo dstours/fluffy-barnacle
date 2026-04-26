@@ -6,6 +6,7 @@ Contains SSHTunnel (SOCKS5 via SSH) and HTTPProxyManager (tinyproxy with
 SOCKS upstream). Extracted from proxy.py for modularity.
 """
 
+import json
 import os
 import shutil
 import signal
@@ -15,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from .state import State
 from .utils import Config, ProxyError, SSHTunnelError, get_logger
 
 
@@ -36,11 +38,17 @@ class SSHTunnel:
         self.pid_file = config.config_dir / f'proxy{pid_suffix}.pid'
         self.stop_file = config.config_dir / f'proxy{pid_suffix}.pid.stop'
         self.log_file = config.config_dir / f'proxy{pid_suffix}.log'
+        self.spec_file = config.config_dir / 'workers' / f'{self.port}.json'
+        self.state = State(config.config_dir)
+        self.tunnel_id = f'ssh-{self.port}'
         self._process: Optional[subprocess.Popen] = None
 
     def start(self, start_timeout: int = 30) -> None:
         """
         Start SSH tunnel with SOCKS5 forwarding and auto-reconnect.
+
+        Spawns a detached subprocess worker that runs the reconnect loop,
+        so the tunnel survives terminal death and works cross-platform.
 
         Args:
             start_timeout: Seconds to wait for the SOCKS5 listener to become healthy.
@@ -51,13 +59,12 @@ class SSHTunnel:
             SSHTunnelError: If tunnel cannot be established
         """
         if self.is_running():
-            self.logger.warning(f"Proxy already running (PID: {self._read_pid()})")
+            self.logger.warning(f"Proxy already running on port {self.port}")
             return
 
         self.logger.info(f"Starting SOCKS5 proxy on port {self.port}...")
-
-        if self.stop_file.exists():
-            self.stop_file.unlink()
+        self.stop_file.unlink(missing_ok=True)
+        self.spec_file.parent.mkdir(parents=True, exist_ok=True)
 
         ssh_args = [
             '--',
@@ -66,28 +73,65 @@ class SSHTunnel:
             '-o', 'ServerAliveInterval=30',
             '-o', 'ServerAliveCountMax=3',
             '-o', 'ExitOnForwardFailure=yes',
-            # Disable ControlMaster so concurrent tunnels to different codespaces
-            # don't share the same relay socket (all codespaces use the same SSH
-            # relay hostname, e.g. vs-ssh.github.dev).  Without this, the second
-            # tunnel hangs waiting to multiplex over the first tunnel's socket.
             '-o', 'ControlMaster=no',
             '-o', 'ControlPath=none',
         ]
 
         gh_cmd = ['gh', 'codespace', 'ssh', '--codespace', self.codespace_name] + ssh_args
 
-        env = os.environ.copy()
+        spec = {
+            'gh_cmd': gh_cmd,
+            'log_file': str(self.log_file),
+            'stop_file': str(self.stop_file),
+            'reconnect_delay': self.config.reconnect_delay,
+            'max_reconnect_delay': self.config.max_reconnect_delay,
+        }
+        self.spec_file.write_text(json.dumps(spec))
 
-        pid = os.fork() if hasattr(os, 'fork') else None
+        worker_cmd = [sys.executable, '-m', 'csproxy._worker', str(self.spec_file)]
 
-        if pid is not None:
-            if pid == 0:
-                self._run_with_reconnect(gh_cmd, env)
-                sys.exit(0)
-            else:
-                self._write_pid(pid)
+        popen_kwargs = {}
+        if sys.platform == 'win32':
+            popen_kwargs['creationflags'] = (
+                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+            )
         else:
-            self._run_windows_background(gh_cmd, env)
+            popen_kwargs['start_new_session'] = True
+
+        proc = subprocess.Popen(
+            worker_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **popen_kwargs,
+        )
+        self._process = proc
+        self._write_pid(proc.pid)
+
+        # Quick verification: ensure the worker didn't crash immediately
+        # and that it still has its spec file (proves it started reading it)
+        time.sleep(0.3)
+        if proc.poll() is not None:
+            self.spec_file.unlink(missing_ok=True)
+            raise SSHTunnelError(
+                f"Tunnel worker exited immediately with code {proc.returncode}. "
+                f"Check that 'python -m csproxy._worker' is executable."
+            )
+        if not self.spec_file.exists():
+            raise SSHTunnelError(
+                "Tunnel worker started but spec file was cleaned up unexpectedly."
+            )
+
+        self.state.add_tunnel(
+            id=self.tunnel_id,
+            kind='ssh',
+            codespace_name=self.codespace_name,
+            port=self.port,
+            pid=proc.pid,
+            status='starting',
+            created=int(time.time()),
+            failures=0,
+            last_failure=0,
+        )
 
         self.logger.info(f"Waiting for tunnel to establish (timeout: {start_timeout}s)...")
         deadline = time.time() + start_timeout
@@ -96,9 +140,11 @@ class SSHTunnel:
             time.sleep(3)
             attempt += 1
             if not self.is_running():
+                self.state.mark_crashed(self.port)
                 raise SSHTunnelError("Tunnel process exited immediately - check logs")
             self.logger.debug(f"Health check attempt {attempt} on port {self.port}...")
             if self.health_check():
+                self.state.update_tunnel(self.port, status='healthy')
                 break
         else:
             self.stop()
@@ -110,49 +156,6 @@ class SSHTunnel:
         self.logger.info("SOCKS5 proxy started successfully")
         self.logger.info(f"  Local endpoint: socks5://127.0.0.1:{self.port}")
 
-    def _run_with_reconnect(self, gh_cmd: list, env: Optional[dict] = None) -> None:
-        """Run SSH tunnel with exponential backoff reconnect."""
-        delay = self.config.reconnect_delay
-
-        while True:
-            if self.stop_file.exists():
-                self.stop_file.unlink()
-                break
-
-            log_mode = 'a' if self.log_file.exists() else 'w'
-            with open(self.log_file, log_mode) as log_fd:
-                process = subprocess.run(
-                    gh_cmd,
-                    stdout=log_fd,
-                    stderr=log_fd,
-                    env=env,
-                )
-
-            if self.stop_file.exists():
-                self.stop_file.unlink()
-                break
-
-            with open(self.log_file, 'a') as log_fd:
-                log_fd.write(
-                    f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] "
-                    f"SSH tunnel disconnected (exit: {process.returncode}). "
-                    f"Reconnecting in {delay}s...\n"
-                )
-
-            time.sleep(delay)
-            delay = min(delay * 2, self.config.max_reconnect_delay)
-
-    def _run_windows_background(self, gh_cmd: list, env: Optional[dict] = None) -> None:
-        """Start tunnel in background thread on Windows (no fork available)."""
-        import threading
-
-        def run():
-            self._run_with_reconnect(gh_cmd, env)
-
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-        self._write_pid(os.getpid())
-
     def stop(self) -> None:
         """Stop the SSH tunnel."""
         self.stop_file.touch()
@@ -161,25 +164,21 @@ class SSHTunnel:
         if pid:
             try:
                 os.kill(pid, signal.SIGTERM)
-                time.sleep(2)
-                try:
+                # Poll for up to 2s for graceful exit
+                for _ in range(20):
+                    time.sleep(0.1)
+                    try:
+                        os.kill(pid, 0)
+                    except ProcessLookupError:
+                        break
+                else:
                     os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 pass
 
-        if self.pid_file.exists():
-            self.pid_file.unlink()
-
-        try:
-            subprocess.run(
-                ['pkill', '-f', f'gh codespace ssh.*-D.*{self.port}'],
-                capture_output=True
-            )
-        except FileNotFoundError:
-            pass
-
+        self.pid_file.unlink(missing_ok=True)
+        self.spec_file.unlink(missing_ok=True)
+        self.state.remove_tunnel(port=self.port)
         self.logger.info("Proxy stopped")
 
     def is_running(self) -> bool:
@@ -192,7 +191,14 @@ class SSHTunnel:
             os.kill(pid, 0)
             return True
         except (ProcessLookupError, PermissionError):
+            self._cleanup_stale()
             return False
+
+    def _cleanup_stale(self) -> None:
+        """Remove stale PID files and state entries for dead processes."""
+        self.pid_file.unlink(missing_ok=True)
+        self.spec_file.unlink(missing_ok=True)
+        self.state.remove_tunnel(port=self.port)
 
     def health_check(self, timeout: int = 5) -> bool:
         """Verify the SOCKS5 proxy is responding."""
@@ -200,6 +206,7 @@ class SSHTunnel:
             [
                 'curl', '-s',
                 '--connect-timeout', str(timeout),
+                '--max-time', str(timeout + 2),
                 '--socks5-hostname', f'127.0.0.1:{self.port}',
                 'https://ifconfig.me'
             ],

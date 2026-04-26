@@ -55,6 +55,18 @@ def main_proxy(argv=None):
     config = Config()
     config.ensure_dirs()
 
+    # Reconcile state: detect crashed tunnels from previous runs
+    from .state import State
+    try:
+        state = State(config.config_dir)
+        crashed = state.reconcile()
+        if crashed:
+            logger.warning(f"Detected {len(crashed)} crashed tunnel(s): "
+                           + ", ".join(str(t['port']) for t in crashed))
+    except TimeoutError as e:
+        logger.error(f"State file is locked by another process: {e}")
+        return 1
+
     if parsed.port:
         config.set('socks_port', parsed.port)
     config.set('num_proxies', parsed.num_proxies)

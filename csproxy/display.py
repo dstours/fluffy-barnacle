@@ -77,11 +77,19 @@ Your browser connects to Burp normally, and Burp routes through SOCKS.
 """)
 
 
-def show_status(config: Config, gh) -> None:
-    """Display proxy and Codespace status information."""
+def _show_status_body(config: Config, gh) -> None:
+    """Core status display logic shared by show_status and watch_status."""
+    from .state import State
     from .tunnel import SSHTunnel
 
     logger = get_logger()
+    try:
+        state = State(config.config_dir)
+        state.reconcile()
+    except TimeoutError as e:
+        print(f"Error: State file is locked by another process: {e}")
+        return
+
     print("\n=== cs-proxy Status ===\n")
 
     pid_file = config.config_dir / 'proxy.pid'
@@ -97,6 +105,16 @@ def show_status(config: Config, gh) -> None:
             print("Proxy Status:    STOPPED (stale PID file)")
     else:
         print("Proxy Status:    STOPPED")
+
+    # Show state.json tunnels
+    state_tunnels = state.get_tunnels(kind='ssh')
+    if state_tunnels:
+        print("\nManaged tunnels:")
+        for t in state_tunnels:
+            status = t.get('status', 'unknown')
+            port = t.get('port', '?')
+            cs = t.get('codespace_name', '?') or '?'
+            print(f"  :{port}  {status:<10}  {cs}")
 
     all_names = config.codespace_names or ([config.codespace_name] if config.codespace_name else [])
     num_tunnels = len(all_names)
@@ -115,12 +133,12 @@ def show_status(config: Config, gh) -> None:
             tunnel = SSHTunnel(config, config.codespace_name)
             if tunnel.health_check():
                 exit_ip = tunnel.get_exit_ip()
-                print(f"Proxy Health:    HEALTHY")
+                print(f"\nProxy Health:    HEALTHY")
                 print(f"Proxied IP:      {exit_ip or 'unknown'}")
             else:
-                print(f"Proxy Health:    UNHEALTHY")
+                print(f"\nProxy Health:    UNHEALTHY")
 
-    print(f"SOCKS5 Port:     {config.socks_port}")
+    print(f"\nSOCKS5 Port:     {config.socks_port}")
     print(f"HTTP Port:       {config.http_proxy_port}")
 
     # Show all codespaces
@@ -136,7 +154,7 @@ def show_status(config: Config, gh) -> None:
         print(f"\nCodespaces:")
         for cs in codespaces:
             name = cs.get('name', '')
-            state = cs.get('state', 'unknown')
+            cs_state = cs.get('state', 'unknown')
             repo = cs.get('repository', '')
             if name in managed:
                 idx = config.codespace_names.index(name) if name in config.codespace_names else -1
@@ -145,7 +163,7 @@ def show_status(config: Config, gh) -> None:
                 role = " [active]"
             else:
                 role = ""
-            print(f"  {name:<45} {state:<12}  {repo}{role}")
+            print(f"  {name:<45} {cs_state:<12}  {repo}{role}")
     elif active:
         print(f"\nCodespace:       {active}")
 
@@ -157,6 +175,25 @@ def show_status(config: Config, gh) -> None:
     )
     local_ip = result.stdout.strip() if result.returncode == 0 else 'unknown'
     print(f"\nYour Direct IP:  {local_ip}")
+    print()
+
+
+def show_status(config: Config, gh) -> None:
+    """Display proxy and Codespace status information."""
+    _show_status_body(config, gh)
+
+
+def watch_status(config: Config, gh, interval: int = 2) -> None:
+    """Auto-refresh status display every N seconds until Ctrl+C."""
+    import sys, time
+    try:
+        while True:
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
+            _show_status_body(config, gh)
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        pass
     print()
 
 

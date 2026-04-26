@@ -15,14 +15,32 @@ Or via the CLI:
 """
 
 import os
+import random
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
 
+from .state import State
 from .utils import Config, get_logger
 
 VERSION = "1.0.0"
+
+
+def _get_proxy_port(config: Config) -> int:
+    """
+    Return a random healthy tunnel port from state.json, or fall back
+    to config.socks_port if no healthy tunnels are tracked.
+    """
+    try:
+        state = State(config.config_dir)
+        healthy = state.get_tunnels(kind="ssh", status="healthy")
+        if healthy:
+            return random.choice(healthy)["port"]
+    except Exception:
+        pass
+    return config.socks_port
+
 
 # Default wordlist paths (SecLists)
 SECLISTS = Path(os.environ.get('SECLISTS', Path.home() / 'wordlists' / 'SecLists'))
@@ -48,7 +66,7 @@ def check_proxy(host: str = '127.0.0.1', port: Optional[int] = None) -> bool:
         True if proxy is up, False otherwise.
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     result = subprocess.run(
         ['curl', '-s', '--connect-timeout', '2',
          '--socks5', f'{host}:{port}', 'https://ifconfig.me'],
@@ -82,7 +100,7 @@ def pcurl(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None) 
         curl exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     if not check_proxy(host, port):
         return 1
     return subprocess.run(
@@ -105,7 +123,7 @@ def pwget(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None) 
         wget exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     proxychains_conf = config.config_dir / 'proxychains.conf'
     if not check_proxy(host, port):
         return 1
@@ -131,7 +149,7 @@ def pnmap(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None) 
         nmap exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     proxychains_conf = config.config_dir / 'proxychains.conf'
     if not check_proxy(host, port):
         return 1
@@ -157,7 +175,7 @@ def pnuclei(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None
         nuclei exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     if not check_proxy(host, port):
         return 1
     env = os.environ.copy()
@@ -180,7 +198,7 @@ def pffuf(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None) 
         ffuf exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     if not check_proxy(host, port):
         return 1
     return subprocess.run(
@@ -203,7 +221,7 @@ def phttpx(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None)
         httpx exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     if not check_proxy(host, port):
         return 1
     return subprocess.run(
@@ -226,7 +244,7 @@ def psqlmap(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None
         sqlmap exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     if not check_proxy(host, port):
         return 1
     return subprocess.run(
@@ -249,7 +267,7 @@ def pcs(args: List[str], host: str = '127.0.0.1', port: Optional[int] = None) ->
         Command exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
     proxychains_conf = config.config_dir / 'proxychains.conf'
     if not check_proxy(host, port):
         return 1
@@ -270,7 +288,7 @@ def ipcheck(host: str = '127.0.0.1', port: Optional[int] = None) -> None:
     Equivalent to ipcheck() in tools-wrapper.sh.
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
 
     # Direct IP
     result = subprocess.run(
@@ -314,7 +332,7 @@ def psub(domain: str, host: str = '127.0.0.1', port: Optional[int] = None) -> in
     """
     import shutil
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
 
     if not domain:
         print("Usage: psub domain.com")
@@ -358,7 +376,7 @@ def pportscan(target: str, ports: str = '21,22,23,25,80,443,445,3306,3389,8080,8
         Exit code
     """
     config = Config()
-    port = port or config.socks_port
+    port = port or _get_proxy_port(config)
 
     if not target:
         print("Usage: pportscan target [ports]")

@@ -315,7 +315,11 @@ def cmd_restart(args, config: Config, gh: GitHubManager) -> int:
 
 
 def cmd_status(args, config: Config, gh: GitHubManager) -> int:
-    """Show proxy status."""
+    """Show proxy status. Pass --watch or -w for auto-refresh."""
+    if args and ('--watch' in args or '-w' in args):
+        from .display import watch_status
+        watch_status(config, gh)
+        return 0
     show_status(config, gh)
     return 0
 
@@ -634,6 +638,35 @@ alias cs-wg='sudo env "PATH=$PATH" cs-wg'
     return 0
 
 
+def cmd_pac(args, config: Config, gh: GitHubManager) -> int:
+    """Generate Proxy Auto-Config (PAC) file contents."""
+    pac = f"""function FindProxyForURL(url, host) {{
+    if (isPlainHostName(host) ||
+        shExpMatch(host, "*.local") ||
+        isInNet(host, "127.0.0.0", "255.0.0.0") ||
+        isInNet(host, "10.0.0.0", "255.0.0.0") ||
+        isInNet(host, "172.16.0.0", "255.240.0.0") ||
+        isInNet(host, "192.168.0.0", "255.255.0.0")) {{
+        return "DIRECT";
+    }}
+    return "SOCKS5 127.0.0.1:{config.socks_port}; DIRECT";
+}}"""
+    print(pac)
+    return 0
+
+
+def cmd_completion(args, config: Config, gh: GitHubManager) -> int:
+    """Generate shell completion script."""
+    shell = args[0] if args else 'bash'
+    from .completion import generate_completion
+    script = generate_completion(shell)
+    if "Unsupported shell" in script:
+        get_logger().error(f"Unsupported shell: {shell}. Supported: bash, zsh")
+        return 1
+    print(script)
+    return 0
+
+
 def cmd_help(args, config: Config, gh: GitHubManager) -> int:
     """Show help."""
     show_help()
@@ -670,5 +703,7 @@ COMMANDS = {
     'rm':           cmd_delete,     # Alias
     'token':        cmd_token,
     'aliases':      cmd_aliases,
+    'pac':          cmd_pac,
+    'completion':   cmd_completion,
     'help':         cmd_help,
 }
