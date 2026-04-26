@@ -2,6 +2,20 @@
 
 Rotate your egress IP by cycling GitHub Codespaces. Each Codespace gets a fresh IP from GitHub's Azure infrastructure.
 
+## Smart Tunnel Rotation
+
+When you have multiple tunnels running, `cs-tools` automatically picks a healthy tunnel from `state.json`. If one tunnel goes down, traffic is routed through another without manual intervention.
+
+```bash
+cs-proxy -n 2 start -l WestEurope -l EastUs
+
+# cs-tools will automatically distribute traffic across healthy tunnels
+cs-tools pnmap -p 80,443 target.com
+cs-tools pffuf -u https://target.com/FUZZ -w wordlist.txt
+```
+
+The rotation is random across healthy tunnels. If no healthy tunnels exist, tools fall back to the configured `socks_port`.
+
 ## Two Simultaneous Proxies
 
 Run two independent tunnels at once, each with a different exit IP:
@@ -66,10 +80,20 @@ for i in range(5):
     time.sleep(5)
 ```
 
+## Circuit Breaker
+
+Tunnels have built-in circuit-breaker protection. If a tunnel fails 3 consecutive health checks (e.g. the Codespace was deleted or the SSH relay is down), it is automatically marked as `dead` and stops retrying. This prevents infinite reconnection loops.
+
+Reset a dead tunnel with:
+
+```bash
+cs-proxy restart
+```
+
 ## Tips
 
 - Codespace creation takes 30-60 seconds. Factor this into your rotation timing.
 - GitHub's free tier includes 120 core-hours/month. A 2-core Codespace gives you 60 hours.
-- The free tier allows a maximum of 2 codespaces. Use `-n 2` to pre-create both.
+- The free tier allows multiple codespaces. Use `-n 2` to pre-create both.
 - Codespaces that sit idle are automatically stopped after 30 minutes, saving billing.
 - Use `cs-proxy teardown` (not just `stop`) to fully delete and free resources.

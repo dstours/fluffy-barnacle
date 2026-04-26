@@ -107,6 +107,9 @@ cs-serve --help
 cs-wg --help
 cs-tools --help
 
+# Run diagnostics
+cs-proxy check
+
 # Run the test suite
 python -m pytest tests/ -v
 ```

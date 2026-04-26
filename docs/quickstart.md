@@ -4,7 +4,7 @@ Get cs-proxy running in under a minute.
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 - `ssh` and `curl` available
 
@@ -22,6 +22,14 @@ pip install -e .
 gh auth login
 ```
 
+## Verify Your Setup
+
+```bash
+cs-proxy check
+```
+
+This diagnoses your environment: `gh` auth, SSH keys, port availability, config, and state file health.
+
 ## Start a Proxy
 
 ```bash
@@ -32,7 +40,7 @@ This will:
 
 1. Select an existing Codespace (or create one interactively)
 2. Start an SSH tunnel with SOCKS5 forwarding on `127.0.0.1:1080`
-3. Run in the background with automatic reconnection
+3. Run in the background with automatic reconnection and circuit-breaker protection
 
 ## Verify
 
@@ -50,6 +58,13 @@ This compares your direct IP with the proxied IP to confirm traffic is routing t
 cs-tools pcurl https://ifconfig.me
 cs-tools pnmap -p 80,443 target.com
 cs-tools pffuf -u https://target.com/FUZZ -w wordlist.txt
+```
+
+### Monitor tunnel health
+
+```bash
+cs-proxy status              # one-shot status
+cs-proxy status --watch      # auto-refresh every 2 seconds
 ```
 
 ### Serve files publicly
@@ -79,6 +94,15 @@ cs-proxy status     # health + exit IP per tunnel
 cs-proxy ssh        # numbered menu to pick which codespace to shell into
 ```
 
+## Dry-Run Mode
+
+Preview actions without making changes:
+
+```bash
+cs-proxy --dry-run start     # show what would start
+cs-proxy --dry-run stop      # show what would stop
+```
+
 ## Stop
 
 ```bash
@@ -90,6 +114,6 @@ cs-proxy delete        # permanently delete codespace(s)
 ## Next Steps
 
 - [Installation Guide](user-guide/installation.md) -- platform-specific setup and troubleshooting
-- [Configuration](user-guide/configuration.md) -- customize ports, codespace, and behavior
+- [Configuration](user-guide/configuration.md) -- customize ports, codespace, profiles, and behavior
 - [Command Reference](user-guide/command-reference/index.md) -- full list of commands
 - [Use Cases](use-cases/index.md) -- real-world scenarios and workflows

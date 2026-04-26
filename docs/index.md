@@ -16,18 +16,30 @@ Fluffy-Barnacle is an operator-focused toolkit that turns GitHub Codespaces into
 
 | Tool | Description |
 |------|-------------|
-| **[cs-proxy](user-guide/command-reference/cs-proxy.md)** | SOCKS5 and HTTP proxy via SSH tunnel with auto-reconnect and Burp Suite integration |
+| **[cs-proxy](user-guide/command-reference/cs-proxy.md)** | SOCKS5 and HTTP proxy via SSH tunnel with auto-reconnect, circuit breaker, and Burp Suite integration |
 | **[cs-serve](user-guide/command-reference/cs-serve.md)** | Instant public HTTPS file hosting, redirect servers, custom HTTP responses, and data capture via `*.app.github.dev` |
 | **[cs-wg](user-guide/command-reference/cs-wg.md)** | Full WireGuard VPN tunnel with route management and traffic monitoring |
-| **[cs-tools](user-guide/command-reference/cs-tools.md)** | Drop-in wrappers for nmap, ffuf, httpx, nuclei, sqlmap with automatic SOCKS5 proxy arguments |
+| **[cs-tools](user-guide/command-reference/cs-tools.md)** | Drop-in wrappers for nmap, ffuf, httpx, nuclei, sqlmap with automatic SOCKS5 proxy arguments and smart tunnel rotation |
 
 Each tool can be used from the CLI or imported directly as a [Python library](development/python-api.md).
+
+## What's New
+
+- **Smart tunnel rotation** — `cs-tools` automatically distributes traffic across healthy tunnels
+- **`cs-proxy check`** — One-command diagnostics for setup, auth, ports, and state health
+- **`--dry-run`** — Preview what `start`/`stop` would do without making changes
+- **Profiles** — Switch between preset configs (e.g. `redteam` / `stealth`) without editing files
+- **Circuit breaker** — Tunnels that fail health checks 3× in a row are automatically marked dead
+- **Shell completion** — Bash and zsh completion via `cs-proxy completion bash`
+- **PAC file generation** — `cs-proxy pac` outputs a Proxy Auto-Config script for browser routing
+- **Status watch mode** — `cs-proxy status --watch` auto-refreshes every 2 seconds
 
 ## Getting Started
 
 ```bash
 pip install -e .
 gh auth login
+cs-proxy check
 cs-proxy start
 cs-tools ipcheck
 ```

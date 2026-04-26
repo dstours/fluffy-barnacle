@@ -5,8 +5,19 @@ SOCKS5 and HTTP proxy management via SSH tunnel to a GitHub Codespace.
 ## Usage
 
 ```
-cs-proxy <command> [options]
+cs-proxy [options] <command> [args]
 ```
+
+## Global Options
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-p`, `--port` | SOCKS5 proxy port | `1080` |
+| `-n`, `--num-proxies` | Number of codespaces/tunnels (1-5); each gets its own port | `1` |
+| `-c`, `--codespace` | Codespace name | auto-select |
+| `-l`, `--location` | Region for new Codespace: `EastUs`, `WestUs2`, `WestEurope`, `SouthEastAsia`. Repeat for multiple: `-l WestEurope -l EastUs` | none |
+| `-v`, `--verbose` | Verbose output | off |
+| `--dry-run` | Show what would happen without making changes | off |
 
 ## Commands
 
@@ -22,11 +33,14 @@ cs-proxy start -c my-codespace-name          # use a specific codespace
 cs-proxy start -p 9050                       # use a non-default port
 cs-proxy -n 2 start                          # two codespaces, two tunnels (1080 + 1081)
 cs-proxy -n 2 start -l WestEurope -l EastUs  # pin each to a specific region
+cs-proxy --dry-run start                     # preview what would happen
 ```
 
-Starts an SSH tunnel with SOCKS5 dynamic port forwarding on `127.0.0.1:<port>`. The tunnel runs in the background with automatic reconnection using exponential backoff.
+Starts an SSH tunnel with SOCKS5 dynamic port forwarding on `127.0.0.1:<port>`. The tunnel runs in the background with automatic reconnection using exponential backoff and jitter.
 
 When `-n 2` is used, a second codespace is created (or reused) and a second independent tunnel is started on the next port (`socks_port + 1`). Each tunnel has a different exit IP. Use `-l` once per codespace to pin each to a region: `EastUs`, `WestUs2`, `WestEurope`, `SouthEastAsia`.
+
+**Circuit breaker:** If a tunnel fails 3 consecutive health checks, it is automatically marked as `dead` and stops retrying. Use `cs-proxy restart` to reset it.
 
 #### `stop`
 
@@ -34,6 +48,7 @@ Stop the proxy tunnel and HTTP proxy.
 
 ```bash
 cs-proxy stop
+cs-proxy --dry-run stop   # preview what would stop
 ```
 
 #### `restart`
@@ -50,9 +65,31 @@ Show tunnel status, Codespace state, and exit IP.
 
 ```bash
 cs-proxy status
+cs-proxy status --watch   # auto-refresh every 2 seconds
 ```
 
 When multiple codespaces are tracked, shows each tunnel's port, health, and exit IP side by side.
+
+### Diagnostics
+
+#### `check`
+
+Run diagnostics and report configuration/dependency health.
+
+```bash
+cs-proxy check
+```
+
+Checks:
+
+- `gh` CLI installed and authenticated
+- `ssh`, `curl`, `proxychains4` installed
+- Config directory and file present
+- SSH key generated
+- SOCKS5/HTTP ports available
+- State file readable
+
+Returns exit code `0` if all checks pass, `1` if any issues are found.
 
 ### HTTP Proxy
 
@@ -86,12 +123,31 @@ Print Burp Suite upstream proxy configuration.
 cs-proxy burp
 ```
 
+#### `pac`
+
+Generate a Proxy Auto-Config (PAC) file for browser routing.
+
+```bash
+cs-proxy pac > ~/.config/cs-proxy/proxy.pac
+```
+
+The PAC script routes local addresses directly and sends everything else through the SOCKS5 proxy. Point your browser to `file:///Users/you/.config/cs-proxy/proxy.pac`.
+
 #### `proxychains`
 
 Generate a proxychains4 configuration file.
 
 ```bash
 cs-proxy proxychains
+```
+
+#### `completion`
+
+Generate shell completion scripts.
+
+```bash
+cs-proxy completion bash   # bash completion
+cs-proxy completion zsh    # zsh completion
 ```
 
 #### `set`
@@ -105,7 +161,7 @@ cs-proxy set codespace_name my-codespace
 
 #### `config`
 
-Manage configuration files.
+Open the configuration file in your `$EDITOR`.
 
 ```bash
 cs-proxy config
@@ -189,14 +245,5 @@ Show tunnel logs.
 
 ```bash
 cs-proxy logs
+cs-proxy logs 100     # last 100 lines
 ```
-
-## Options
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-p`, `--port` | SOCKS5 proxy port | `1080` |
-| `-n`, `--num-proxies` | Number of codespaces/tunnels (max 2); each gets its own port | `1` |
-| `-c`, `--codespace` | Codespace name | auto-select |
-| `-l`, `--location` | Region for new Codespace: `EastUs`, `WestUs2`, `WestEurope`, `SouthEastAsia`. Repeat for multiple: `-l WestEurope -l EastUs` | none |
-| `-v`, `--verbose` | Verbose output | off |

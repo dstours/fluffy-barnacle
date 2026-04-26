@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python 3.8+">
+  <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0 License"></a>
   <a href="https://github.com/psf/black"><img src="https://img.shields.io/badge/code%20style-black-000000.svg" alt="Code style: black"></a>
 </p>
@@ -22,8 +22,8 @@
 > **GitHub's Terms of Service** and **Acceptable Use Policies** explicitly prohibit certain uses of Codespaces, including:
 > 
 > - Using Codespaces to disrupt services, gain unauthorized access to networks/devices, or support attack infrastructure (see [GitHub Terms for Additional Products and Features - Codespaces section](https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features#codespaces)).
-> - Placing disproportionate burden on GitHub's servers (e.g., excessive bandwidth, proxy/CDN-like usage).
-> - Any activity violating applicable laws, third-party rights, or GitHub's Acceptable Use Policies (e.g., unauthorized scanning, proxying for malicious purposes).
+> - Placing disproportionate burden on GitHub's servers (e.g. excessive bandwidth, proxy/CDN-like usage).
+> - Any activity violating applicable laws, third-party rights, or GitHub's Acceptable Use Policies (e.g. unauthorized scanning, proxying for malicious purposes).
 > 
 > Misuse may result in suspension/termination of your GitHub account, Codespaces access restrictions, or other enforcement actions by GitHub.
 > The author is not liable for any harm or damage resulting from its unauthorized use.
@@ -38,10 +38,10 @@ Full documentation at **[https://dstours.github.io/fluffy-barnacle/](https://dst
 
 | Tool | Description |
 |------|-------------|
-| **cs-proxy** | SOCKS5 and HTTP proxy via SSH tunnel with auto-reconnect and Burp Suite integration |
+| **cs-proxy** | SOCKS5 and HTTP proxy via SSH tunnel with auto-reconnect, circuit breaker, and Burp Suite integration |
 | **cs-serve** | Instant public HTTPS file hosting, redirect servers, custom HTTP responses, and data capture via `*.app.github.dev` |
 | **cs-wg** | Full WireGuard VPN tunnel with route management and traffic monitoring |
-| **cs-tools** | Drop-in wrappers for nmap, ffuf, httpx, nuclei, sqlmap with automatic SOCKS5 proxy arguments |
+| **cs-tools** | Drop-in wrappers for nmap, ffuf, httpx, nuclei, sqlmap with automatic SOCKS5 proxy arguments and smart tunnel rotation |
 
 Codespace IPs rotate on each creation, giving you fresh egress IPs on demand. Each tool works from the CLI or as a Python library.
 
@@ -50,15 +50,16 @@ Codespace IPs rotate on each creation, giving you fresh egress IPs on demand. Ea
 ```bash
 pip install -e .
 gh auth login
+cs-proxy check               # verify your setup
 cs-proxy start
-cs-tools ipcheck          # verify you're proxied
+cs-tools ipcheck             # verify you're proxied
 ```
 
 See the [Quick Start Guide](https://dstours.github.io/fluffy-barnacle/quickstart/) for detailed setup.
 
 ## Feature Highlights
 
-### SOCKS5 Proxy with Auto-Reconnect
+### SOCKS5 Proxy with Auto-Reconnect & Circuit Breaker
 
 ```bash
 cs-proxy start                                # single proxy, auto-select codespace
@@ -67,9 +68,12 @@ cs-proxy create                               # create a new codespace and track
 cs-proxy start                                # picks up unstarted tracked codespaces
 cs-proxy -n 2 start -l WestEurope -l EastUs  # two proxies, different regions (ports 1080 + 1081)
 cs-proxy status             # codespace state + per-tunnel exit IP
+cs-proxy status --watch     # auto-refresh every 2 seconds
 cs-proxy ssh                # interactive shell (menu if multiple codespaces tracked)
 cs-proxy env                # export statements for tools that read env vars
 cs-proxy burp               # upstream proxy config for Burp Suite
+cs-proxy pac                # generate Proxy Auto-Config (PAC) file
+cs-proxy check              # diagnose setup, auth, ports, and state health
 ```
 
 **Adding a second proxy:**
@@ -78,6 +82,24 @@ There are two workflows for running multiple exit IPs:
 
 1. **Auto-add:** Run `cs-proxy start` again when a proxy is already running — it creates a new codespace and starts a second tunnel automatically.
 2. **Manual:** Run `cs-proxy create` to create a codespace first, then `cs-proxy start` to tunnel it (skips the first running tunnel and starts one for the new codespace).
+
+**Dry-run mode:**
+
+```bash
+cs-proxy --dry-run start    # show what would happen without making changes
+cs-proxy --dry-run stop     # show what would stop without stopping anything
+```
+
+**Shell completion:**
+
+```bash
+cs-proxy completion bash > ~/.config/cs-proxy/completion.bash
+source ~/.config/cs-proxy/completion.bash
+```
+
+### Smart Proxy Rotation
+
+`cs-tools` automatically picks a healthy tunnel from `state.json`. If you have multiple tunnels running, tool traffic is rotated across them without manual port selection.
 
 ### Public File Hosting
 
@@ -111,7 +133,7 @@ cs-tools pcs gobuster dir -u https://target.com -w list.txt
 
 ## Installation
 
-**Requirements:** Python 3.8+, [GitHub CLI](https://cli.github.com/) (`gh`), `ssh`, `curl`
+**Requirements:** Python 3.10+, [GitHub CLI](https://cli.github.com/) (`gh`), `ssh`, `curl`
 
 ```bash
 git clone https://github.com/dstours/fluffy-barnacle.git
@@ -152,15 +174,25 @@ Config file: `~/.config/cs-proxy/config.yaml`
 ```yaml
 socks_port: 1080
 http_proxy_port: 8080
-num_proxies: 1              # 1-2; starts a tunnel through each on consecutive ports
+num_proxies: 1              # 1-5; starts a tunnel through each on consecutive ports
 codespace_name: ""
 locations: []               # e.g. [WestEurope, EastUs] — one region per codespace
 reconnect_delay: 5
 max_reconnect_delay: 300
 verbose: false
+
+# Profiles let you switch between preset configurations
+profile: ""
+profiles:
+  redteam:
+    num_proxies: 2
+    locations: [WestEurope, EastUs]
+  stealth:
+    dns_proxy: true
+    verbose: true
 ```
 
-See the [Configuration Reference](https://dstours.github.io/fluffy-barnacle/user-guide/configuration/) for all options and environment variables.
+See the [Configuration Reference](https://dstours.github.io/fluffy-barnacle/user-guide/configuration/) for all options, environment variables, and profiles.
 
 ## License
 
