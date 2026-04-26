@@ -185,14 +185,23 @@ Create a new Codespace interactively.
 cs-proxy create
 ```
 
-#### `teardown` / `down`
+#### `teardown`
 
 Stop the proxy tunnel(s) and shut down all managed Codespaces (compute stops, storage is preserved — no billing).
 
 ```bash
 cs-proxy teardown     # stops all tunnels and all tracked codespaces
-cs-proxy down         # alias
 ```
+
+#### `down`
+
+Stop the proxy tunnel(s), shut down, and **permanently delete** all managed Codespaces.
+
+```bash
+cs-proxy down         # stops tunnels, then prompts to confirm deletion
+```
+
+This is the "nuclear option" for cleaning up after a session. It stops tunnels, stops codespaces, then asks for confirmation before permanently deleting them.
 
 #### `name`
 

@@ -229,7 +229,8 @@ COMMANDS:
     run <cmd>       Run a command in the Codespace
     name            Print the current Codespace name
 
-    down            Stop proxy and Codespace (saves storage, no compute)
+    teardown        Stop proxy and Codespace (saves storage, no compute)
+    down            Stop proxy and permanently delete Codespace(s)
     delete          Permanently delete the Codespace
 
     list            List available Codespaces

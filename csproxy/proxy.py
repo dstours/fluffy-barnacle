@@ -564,6 +564,54 @@ def cmd_teardown(args, config: Config, gh: GitHubManager) -> int:
     return 0
 
 
+def cmd_down(args, config: Config, gh: GitHubManager) -> int:
+    """Stop proxy and permanently delete all managed Codespaces."""
+    logger = get_logger()
+    check_dependencies(['gh'])
+    gh.check_auth()
+
+    # Step 1: stop tunnels
+    tunnel = SSHTunnel(config, config.codespace_name or '')
+    tunnel.stop()
+    for i in range(1, len(config.codespace_names)):
+        SSHTunnel(config, '', port=config.socks_port + i, pid_suffix=str(i + 1)).stop()
+
+    all_names = list(config.codespace_names) or ([config.codespace_name] if config.codespace_name else [])
+    if not all_names:
+        logger.warning("No Codespace configured.")
+        return 0
+
+    # Step 2: stop codespaces first (clean shutdown before delete)
+    for name in all_names:
+        logger.info(f"Stopping Codespace: {name}")
+        gh.run_gh_command(
+            ['codespace', 'stop', '--codespace', name], check=False
+        )
+
+    # Step 3: confirm deletion
+    if len(all_names) > 1:
+        print(f"\nThis will PERMANENTLY delete {len(all_names)} managed codespaces:")
+        for name in all_names:
+            print(f"  - {name}")
+    else:
+        print(f"\nThis will PERMANENTLY delete: {all_names[0]}")
+    confirm = input("Are you sure? [y/N] ").strip().lower()
+    if confirm != 'y':
+        logger.info("Cancelled — codespaces were stopped but not deleted.")
+        return 0
+
+    # Step 4: delete
+    for name in all_names:
+        logger.info(f"Deleting Codespace: {name}")
+        gh.delete_codespace(name, force=True)
+
+    config.set('codespace_name', '')
+    config.set('codespace_names', [])
+    config.save()
+    logger.info(f"Deleted {len(all_names)} codespace(s)")
+    return 0
+
+
 def cmd_delete(args, config: Config, gh: GitHubManager) -> int:
     """Delete Codespace(s) permanently."""
     logger = get_logger()
@@ -824,7 +872,7 @@ COMMANDS = {
     'run':          cmd_run,
     'name':         cmd_name,
     'teardown':     cmd_teardown,
-    'down':         cmd_teardown,   # Alias
+    'down':         cmd_down,
     'delete':       cmd_delete,
     'rm':           cmd_delete,     # Alias
     'token':        cmd_token,

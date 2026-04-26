@@ -107,8 +107,9 @@ cs-proxy --dry-run stop      # show what would stop
 
 ```bash
 cs-proxy stop          # stop all proxy tunnels
-cs-proxy down          # stop tunnels + shut down all managed codespaces
-cs-proxy delete        # permanently delete codespace(s)
+cs-proxy teardown      # stop tunnels + shut down codespaces (storage preserved)
+cs-proxy down          # stop tunnels + permanently delete codespaces
+cs-proxy delete        # interactively delete specific codespace(s)
 ```
 
 ## Next Steps
