@@ -171,9 +171,14 @@ class Config:
                     config_file=str(self.config_file),
                 )
 
-            known = {f.name for f in fields(_ConfigData)} | self.DEPRECATED_KEYS
+            known = {f.name for f in fields(_ConfigData)}
             for key in loaded:
-                if key not in known:
+                if key in self.DEPRECATED_KEYS:
+                    self.logger.warning(
+                        f"Deprecated config key '{key}' will be ignored. "
+                        f"Please remove it from {self.config_file}"
+                    )
+                elif key not in known:
                     self.logger.warning(f"Unknown config key: {key}")
 
             self._extra = {k: v for k, v in loaded.items() if k not in known}

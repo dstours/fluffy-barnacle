@@ -98,10 +98,13 @@ class SSHTunnel:
         else:
             popen_kwargs['start_new_session'] = True
 
+        # Redirect stderr to a file so we can surface it if the worker
+        # crashes immediately (e.g., import error, bad spec).
+        stderr_file = self.spec_file.with_suffix('.stderr')
         proc = subprocess.Popen(
             worker_cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=open(stderr_file, 'w'),
             **popen_kwargs,
         )
         self._process = proc
@@ -111,11 +114,21 @@ class SSHTunnel:
         # and that it still has its spec file (proves it started reading it)
         time.sleep(0.3)
         if proc.poll() is not None:
+            stderr_text = ""
+            try:
+                if stderr_file.exists():
+                    stderr_text = stderr_file.read_text().strip()
+                    stderr_file.unlink(missing_ok=True)
+            except OSError:
+                pass
             self.spec_file.unlink(missing_ok=True)
-            raise SSHTunnelError(
+            msg = (
                 f"Tunnel worker exited immediately with code {proc.returncode}. "
                 f"Check that 'python -m csproxy._worker' is executable."
             )
+            if stderr_text:
+                msg += f" Worker stderr: {stderr_text[:500]}"
+            raise SSHTunnelError(msg)
         if not self.spec_file.exists():
             raise SSHTunnelError(
                 "Tunnel worker started but spec file was cleaned up unexpectedly."
@@ -213,7 +226,19 @@ class SSHTunnel:
             capture_output=True,
             timeout=timeout + 5
         )
-        return result.returncode == 0
+        healthy = result.returncode == 0
+        if healthy:
+            # Reset failure counter on success
+            self.state.update_tunnel(self.port, failures=0, last_failure=0)
+        else:
+            # Record failure and trip circuit breaker if threshold exceeded
+            tripped = self.state.record_failure(self.port)
+            if tripped:
+                self.logger.warning(
+                    f"Circuit breaker tripped for tunnel :{self.port}. "
+                    f"Tunnel marked as dead — manual restart required."
+                )
+        return healthy
 
     def get_exit_ip(self) -> Optional[str]:
         """Get the exit IP address through the proxy."""

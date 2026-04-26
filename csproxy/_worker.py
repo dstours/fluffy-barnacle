@@ -14,6 +14,7 @@ Debug mode:
 import argparse
 import json
 import os
+import random
 import signal
 import subprocess
 import sys
@@ -91,7 +92,10 @@ def main() -> None:
         if stop_requested:
             break
 
-        time.sleep(delay)
+        # Add jitter (±25%) to prevent thunder-herding when multiple tunnels
+        # reconnect simultaneously after a GitHub SSH endpoint blip.
+        jittered = delay * (1 + random.uniform(-0.25, 0.25))
+        time.sleep(max(0.5, jittered))
         delay = min(delay * 2, max_reconnect_delay)
 
     if debug:

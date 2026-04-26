@@ -8,6 +8,7 @@ integration with common security tools.
 """
 
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -239,6 +240,18 @@ def cmd_start(args, config: Config, gh: GitHubManager) -> int:
     """Start SOCKS5 proxy tunnel."""
     logger = get_logger()
     check_dependencies(['gh', 'ssh', 'curl'])
+
+    if getattr(config, '_dry_run', False):
+        names = config.codespace_names or ([config.codespace_name] if config.codespace_name else [])
+        if not names:
+            print("[dry-run] No codespace configured. Would prompt for selection.")
+            return 0
+        for i, name in enumerate(names):
+            port = config.socks_port + i
+            print(f"[dry-run] Would start tunnel {name} on port {port}")
+        print("[dry-run] Would generate proxychains config and save settings")
+        return 0
+
     gh.check_auth()
 
     num_proxies = min(config.get('num_proxies', 1), 2)
@@ -283,8 +296,15 @@ def cmd_start(args, config: Config, gh: GitHubManager) -> int:
         port = config.socks_port + i
         t = SSHTunnel(config, name, port=port, pid_suffix=suffix)
         if not t.is_running():
+            if getattr(config, '_dry_run', False):
+                print(f"[dry-run] Would start tunnel {name} on port {port}")
+                continue
             selector.ensure_running(name)
             t.start(start_timeout=30 if i == 0 else 90)
+
+    if getattr(config, '_dry_run', False):
+        print("[dry-run] Would generate proxychains config and save settings")
+        return 0
 
     ProxychainsConfig.generate(config)
     print_usage_examples(config)
@@ -295,6 +315,13 @@ def cmd_start(args, config: Config, gh: GitHubManager) -> int:
 
 def cmd_stop(args, config: Config, gh: GitHubManager) -> int:
     """Stop proxy tunnel."""
+    if getattr(config, '_dry_run', False):
+        print(f"[dry-run] Would stop tunnel for {config.codespace_name or 'active codespace'}")
+        for i in range(1, len(config.codespace_names)):
+            print(f"[dry-run] Would stop tunnel on port {config.socks_port + i}")
+        print("[dry-run] Would stop HTTP proxy")
+        return 0
+
     tunnel = SSHTunnel(config, config.codespace_name or '')
     tunnel.stop()
 
@@ -667,6 +694,105 @@ def cmd_completion(args, config: Config, gh: GitHubManager) -> int:
     return 0
 
 
+def cmd_check(args, config: Config, gh: GitHubManager) -> int:
+    """Run diagnostics and report configuration/dependency health."""
+    logger = get_logger()
+    issues = 0
+    checks = []
+
+    def _ok(msg: str) -> None:
+        checks.append(("PASS", msg))
+
+    def _fail(msg: str) -> None:
+        nonlocal issues
+        issues += 1
+        checks.append(("FAIL", msg))
+
+    # 1. GitHub CLI
+    if shutil.which('gh'):
+        _ok("gh CLI is installed")
+        result = subprocess.run(['gh', 'auth', 'status'], capture_output=True, text=True)
+        if result.returncode == 0:
+            _ok("gh CLI is authenticated")
+        else:
+            _fail("gh CLI is not authenticated (run: gh auth login)")
+    else:
+        _fail("gh CLI is not installed")
+
+    # 2. SSH
+    if shutil.which('ssh'):
+        _ok("ssh is installed")
+    else:
+        _fail("ssh is not installed")
+
+    # 3. curl
+    if shutil.which('curl'):
+        _ok("curl is installed")
+    else:
+        _fail("curl is not installed")
+
+    # 4. proxychains4
+    if shutil.which('proxychains4'):
+        _ok("proxychains4 is installed")
+    else:
+        _fail("proxychains4 is not installed (optional: apt install proxychains-ng)")
+
+    # 5. Config directory / file
+    if config.config_dir.exists():
+        _ok(f"Config directory exists: {config.config_dir}")
+    else:
+        _fail(f"Config directory missing: {config.config_dir}")
+
+    if config.config_file.exists():
+        _ok(f"Config file exists: {config.config_file}")
+    else:
+        _fail(f"Config file missing: {config.config_file}")
+
+    # 6. SSH key
+    key_file = config.config_dir / 'codespace_key'
+    if key_file.exists():
+        _ok(f"SSH key exists: {key_file}")
+    else:
+        _fail(f"SSH key missing: {key_file} (run: cs-proxy keygen)")
+
+    # 7. Port conflicts
+    import socket
+    for port, label in [(config.socks_port, 'SOCKS5'), (config.http_proxy_port, 'HTTP')]:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind(('127.0.0.1', port))
+                _ok(f"{label} port {port} is available")
+            except OSError:
+                _fail(f"{label} port {port} is already in use")
+
+    # 8. State file health
+    from .state import State
+    try:
+        state = State(config.config_dir)
+        state_data = state.load()
+        tunnels = state_data.get('tunnels', [])
+        if tunnels:
+            _ok(f"State file has {len(tunnels)} tunnel(s)")
+        else:
+            _ok("State file is healthy (no tunnels)")
+    except Exception as e:
+        _fail(f"State file error: {e}")
+
+    # Report
+    print("\n=== cs-proxy Check ===\n")
+    for status, msg in checks:
+        icon = "✓" if status == "PASS" else "✗"
+        print(f"  {icon}  {msg}")
+    print()
+    if issues == 0:
+        print("All checks passed.")
+        return 0
+    else:
+        print(f"{issues} issue(s) found. Run with --verbose for details.")
+        return 1
+
+
 def cmd_help(args, config: Config, gh: GitHubManager) -> int:
     """Show help."""
     show_help()
@@ -705,5 +831,6 @@ COMMANDS = {
     'aliases':      cmd_aliases,
     'pac':          cmd_pac,
     'completion':   cmd_completion,
+    'check':        cmd_check,
     'help':         cmd_help,
 }
