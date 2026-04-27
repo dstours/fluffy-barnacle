@@ -110,7 +110,13 @@ class Config:
         config_file: Optional[Path] = None,
     ):
         self.logger = get_logger()
-        self.config_dir = config_dir or Path.home() / ".config" / "cs-proxy"
+        config_dir_override = os.environ.get("CS_PROXY_CONFIG_DIR")
+        if config_dir is not None:
+            self.config_dir = Path(config_dir)
+        elif config_dir_override:
+            self.config_dir = Path(config_dir_override).expanduser()
+        else:
+            self.config_dir = Path.home() / ".config" / "cs-proxy"
         if config_file:
             self.config_file = Path(config_file)
         else:

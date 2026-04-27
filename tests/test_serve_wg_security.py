@@ -43,6 +43,7 @@ def test_upload_accepts_safe_relative_path():
     # Should not raise
     _validate_remote_path("payload.txt")
     _validate_remote_path("captures/data.bin")
+    _validate_remote_path("/tmp/serve/payload.txt")
 
 
 def test_upload_file_rejects_oversized(tmp_path, monkeypatch):

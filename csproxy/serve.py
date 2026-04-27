@@ -9,6 +9,7 @@ through a Codespace, producing public HTTPS URLs on app.github.dev.
 import shlex
 import subprocess
 import time
+from posixpath import normpath
 from pathlib import Path
 from typing import Optional
 
@@ -83,10 +84,20 @@ def _get_available_codespace(gh: GitHubManager, config: Config) -> str:
 
 def _validate_remote_path(remote_path: str) -> None:
     """Reject paths that traverse outside the serve directory."""
-    if not remote_path or remote_path.startswith('/'):
-        raise ValueError(f"Absolute paths are not allowed: {remote_path}")
-    if '..' in remote_path:
+    if not remote_path:
+        raise ValueError("Remote path is required")
+
+    if ".." in remote_path.split("/"):
         raise ValueError(f"Path traversal is not allowed: {remote_path}")
+
+    normalized = normpath(remote_path)
+    if normalized == ".":
+        raise ValueError(f"Invalid remote path: {remote_path}")
+
+    if normalized.startswith("/"):
+        serve_root = normpath(SERVE_DIR)
+        if normalized != serve_root and not normalized.startswith(f"{serve_root}/"):
+            raise ValueError(f"Absolute paths outside {SERVE_DIR} are not allowed: {remote_path}")
 
 
 def _ssh(gh: GitHubManager, cs_name: str, command: str,

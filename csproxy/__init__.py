@@ -8,7 +8,7 @@ and WireGuard VPN tunnels for security research and testing.
 
 __version__ = "1.0.0"
 __author__ = "cs-proxy contributors"
-__license__ = "MIT"
+__license__ = "Apache-2.0"
 
 from .github import GitHubManager
 from .codespace import CodespaceSelector

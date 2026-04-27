@@ -218,6 +218,7 @@ def main_wg(argv=None):
         prog='cs-wg',
         description='GitHub Codespaces WireGuard VPN - full transparent tunneling',
     )
+    parser.add_argument('-c', '--codespace', help='Codespace name to use')
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
 
     subparsers = parser.add_subparsers(dest='command', help='WireGuard command')
@@ -233,7 +234,7 @@ def main_wg(argv=None):
     sp_monitor = subparsers.add_parser('monitor', help='Traffic monitoring')
     sp_monitor.add_argument(
         'mode', nargs='?',
-        choices=['http', 'dns', 'hosts', 'conns', 'leak'],
+        choices=['http', 'dns', 'hosts', 'conns', 'all', 'leak'],
         default=None,
     )
 
@@ -249,6 +250,8 @@ def main_wg(argv=None):
     try:
         from .wireguard import COMMANDS as WG_COMMANDS
         config = Config()
+        if args.codespace:
+            config.set('codespace_name', args.codespace)
         gh = GitHubManager(config_dir=config.config_dir)
         handler = WG_COMMANDS.get(args.command)
         if handler:

@@ -101,6 +101,23 @@ def test_cli_entry_points_importable():
     assert callable(main_wg)
 
 
+def test_main_wg_accepts_codespace_flag():
+    """cs-wg documents -c/--codespace, so parsing must pass it into Config."""
+    from csproxy.cli import main_wg
+
+    seen = {}
+
+    def handler(args, config, gh):
+        seen["codespace_name"] = config.codespace_name
+        return 0
+
+    with patch("csproxy.wireguard.COMMANDS", {"status": handler}):
+        result = main_wg(["-c", "my-codespace", "status"])
+
+    assert result == 0
+    assert seen["codespace_name"] == "my-codespace"
+
+
 def test_serve_script_templates_compile():
     """Embedded server script templates produce valid Python."""
     import py_compile

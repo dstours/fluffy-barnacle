@@ -107,6 +107,17 @@ def test_config_env_override_socks_port(monkeypatch, tmp_path):
     assert config.socks_port == 9999
 
 
+def test_config_dir_env_override(monkeypatch, tmp_path):
+    from csproxy.utils.config import Config
+
+    config_dir = tmp_path / "custom-config"
+    monkeypatch.setenv("CS_PROXY_CONFIG_DIR", str(config_dir))
+    config = Config()
+
+    assert config.config_dir == config_dir
+    assert config.config_file == config_dir / "config.yaml"
+
+
 def test_config_env_override_locations(monkeypatch, tmp_path):
     from csproxy.utils.config import Config
     monkeypatch.setenv("LOCATIONS", "WestEurope,EastUs")

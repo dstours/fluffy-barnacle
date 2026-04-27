@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Python 3.8+** (3.10+ recommended)
+- **Python 3.10+**
 - **Linux or macOS** (WSL works on Windows)
 
 ### Required External Tools

@@ -4,7 +4,9 @@ cs-proxy uses a YAML configuration file with environment variable overrides and 
 
 ## Config File
 
-**Location:** `~/.config/cs-proxy/config.yaml`
+**Default location:** `~/.config/cs-proxy/config.yaml`
+
+Set `CS_PROXY_CONFIG_DIR` to use a different config directory.
 
 ```yaml
 # Proxy settings

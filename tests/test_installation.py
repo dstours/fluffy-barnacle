@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 
-def test_imports():
+def check_imports():
     """Test that all modules can be imported."""
     print("[*] Testing imports...")
 
@@ -43,7 +43,7 @@ def test_imports():
         return False
 
 
-def test_logging():
+def check_logging():
     """Test logging functionality."""
     print("\n[*] Testing logging...")
 
@@ -65,7 +65,7 @@ def test_logging():
         return False
 
 
-def test_config():
+def check_config():
     """Test configuration management."""
     print("\n[*] Testing configuration...")
 
@@ -94,7 +94,7 @@ def test_config():
         return False
 
 
-def test_github_manager():
+def check_github_manager():
     """Test GitHub manager initialization."""
     print("\n[*] Testing GitHub manager...")
 
@@ -118,7 +118,7 @@ def test_github_manager():
         return False
 
 
-def test_dependencies():
+def check_dependencies():
     """Test dependency checking."""
     print("\n[*] Testing dependency checking...")
 
@@ -151,7 +151,7 @@ def test_dependencies():
         return False
 
 
-def test_exceptions():
+def check_exceptions():
     """Test custom exceptions."""
     print("\n[*] Testing exceptions...")
 
@@ -182,7 +182,7 @@ def test_exceptions():
         return False
 
 
-def test_proxy_module():
+def check_proxy_module():
     """Test Phase 2 proxy module imports and structure."""
     print("\n[*] Testing proxy module (Phase 2)...")
 
@@ -247,7 +247,7 @@ def test_proxy_module():
         return False
 
 
-def test_serve_module():
+def check_serve_module():
     """Test cs-serve module imports and structure."""
     print("\n[*] Testing serve module (cs-serve.sh conversion)...")
 
@@ -332,7 +332,7 @@ def test_serve_module():
         return False
 
 
-def test_wireguard_module():
+def check_wireguard_module():
     """Test cs-wg module imports and structure."""
     print("\n[*] Testing wireguard module (cs-wg.sh conversion)...")
 
@@ -399,7 +399,7 @@ def test_wireguard_module():
         return False
 
 
-def test_tools_module():
+def check_tools_module():
     """Test cs-tools module imports and structure."""
     print("\n[*] Testing tools module (tools-wrapper.sh conversion)...")
 
@@ -462,16 +462,16 @@ def main():
     print("=" * 70)
 
     tests = [
-        test_imports,
-        test_logging,
-        test_config,
-        test_github_manager,
-        test_dependencies,
-        test_exceptions,
-        test_proxy_module,
-        test_serve_module,
-        test_wireguard_module,
-        test_tools_module,
+        check_imports,
+        check_logging,
+        check_config,
+        check_github_manager,
+        check_dependencies,
+        check_exceptions,
+        check_proxy_module,
+        check_serve_module,
+        check_wireguard_module,
+        check_tools_module,
     ]
 
     results = []
@@ -500,9 +500,13 @@ def main():
     else:
         print(f"[-] SOME TESTS FAILED ({passed}/{total} passed)")
         print("\nPlease check the errors above and ensure:")
-        print("  - Python 3.8+ is installed")
+        print("  - Python 3.10+ is installed")
         print("  - Dependencies are installed: pip install -e .")
         return 1
+
+
+def test_installation_smoke():
+    assert main() == 0
 
 
 if __name__ == '__main__':

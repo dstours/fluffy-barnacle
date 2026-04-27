@@ -26,7 +26,13 @@ class GitHubManager:
             config_dir: Configuration directory (default: ~/.config/cs-proxy)
         """
         self.logger = get_logger()
-        self.config_dir = config_dir or Path.home() / '.config' / 'cs-proxy'
+        config_dir_override = os.environ.get('CS_PROXY_CONFIG_DIR')
+        if config_dir is not None:
+            self.config_dir = Path(config_dir)
+        elif config_dir_override:
+            self.config_dir = Path(config_dir_override).expanduser()
+        else:
+            self.config_dir = Path.home() / '.config' / 'cs-proxy'
         self.token_file = self.config_dir / 'gh_token'
         self._token = None
 

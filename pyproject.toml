@@ -7,7 +7,7 @@ name = "fluffy-barnacle"
 version = "1.0.0"
 description = "Disposable, ephemeral network infrastructure powered by GitHub Codespaces"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 keywords = ["bugbounty", "codespaces", "ephemeral", "github", "infrastructure", "red-team", "proxy", "socks5", "security", "wireguard", "vpn"]
 authors = [
@@ -21,8 +21,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -67,10 +65,10 @@ include = ["csproxy*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py38']
+target-version = ['py310']
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
