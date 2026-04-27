@@ -11,8 +11,10 @@ __author__ = "cs-proxy contributors"
 __license__ = "Apache-2.0"
 
 from .github import GitHubManager
+from .accounts import GitHubAccount
 from .codespace import CodespaceSelector
 from .proxy import ProxychainsConfig
+from .runner import CommandRunner
 from .state import State
 from .tunnel import HTTPProxyManager, SSHTunnel
 from .tools import (
@@ -41,6 +43,8 @@ __all__ = [
     '__version__',
     # Core managers
     'GitHubManager',
+    'GitHubAccount',
+    'CommandRunner',
     'SSHTunnel',
     'HTTPProxyManager',
     'CodespaceSelector',

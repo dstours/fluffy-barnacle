@@ -15,7 +15,8 @@ def test_csproxy_package_exports():
     import csproxy
     expected = [
         'SSHTunnel', 'HTTPProxyManager', 'CodespaceSelector', 'ProxychainsConfig',
-        'GitHubManager', 'Config', 'setup_logger', 'get_logger',
+        'GitHubManager', 'GitHubAccount', 'CommandRunner',
+        'Config', 'setup_logger', 'get_logger',
         'check_dependencies', 'CSProxyError',
         'check_proxy', 'ipcheck', 'pcurl', 'pwget', 'pnmap', 'pnuclei',
         'pffuf', 'phttpx', 'psqlmap', 'pcs', 'psub', 'pportscan',

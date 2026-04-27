@@ -27,6 +27,14 @@ max_reconnect_delay: 300    # max delay with exponential backoff + jitter
 dns_proxy: false
 verbose: false
 
+# Optional named GitHub accounts for future pool/chain workflows.
+# Tokens are read from environment variables, never from CLI arguments.
+accounts:
+  default:
+    token_env: GH_TOKEN
+  eu:
+    token_env: GH_TOKEN_EU
+
 # Profiles — switch between presets without editing files
 profile: ""                 # active profile name (must match a key below)
 profiles:
@@ -97,6 +105,21 @@ All settings can be overridden via environment variables:
 | `MAX_RECONNECT_DELAY` | `max_reconnect_delay` | `300` | Max reconnect delay (s) |
 | `DNS_PROXY` | `dns_proxy` | `false` | Route DNS through proxy (`true`/`1`/`yes`) |
 | `VERBOSE` | `verbose` | `false` | Enable debug logging (`true`/`1`/`yes`) |
+
+### Named Accounts
+
+Named accounts let advanced workflows target different GitHub identities without
+putting PATs in config files or command history:
+
+```yaml
+accounts:
+  eu:
+    token_env: GH_TOKEN_EU
+  us:
+    token_env: GH_TOKEN_US
+```
+
+Set those environment variables before using account-aware commands.
 
 ### Additional Environment Variables
 

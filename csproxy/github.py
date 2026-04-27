@@ -12,13 +12,21 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from .accounts import GitHubAccount
+from .runner import CommandRunner
 from .utils import GitHubAuthError, get_logger
 
 
 class GitHubManager:
     """Manages GitHub CLI operations and authentication."""
 
-    def __init__(self, config_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        config_dir: Optional[Path] = None,
+        *,
+        account: Optional[GitHubAccount] = None,
+        runner: Optional[CommandRunner] = None,
+    ):
         """
         Initialize GitHub manager.
 
@@ -35,6 +43,8 @@ class GitHubManager:
             self.config_dir = Path.home() / '.config' / 'cs-proxy'
         self.token_file = self.config_dir / 'gh_token'
         self._token = None
+        self.account = account
+        self.runner = runner or CommandRunner()
 
     def load_token(self) -> Optional[str]:
         """
@@ -48,6 +58,15 @@ class GitHubManager:
             GitHub token if found, None otherwise
         """
         # Priority 1: Environment variables
+        if self.account:
+            token = self.account.token
+            if token:
+                self.logger.debug(
+                    f"Using token from ${self.account.token_env} for account {self.account.name}"
+                )
+                self._token = token
+                return token
+
         token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
         if token:
             self.logger.debug("Using GH_TOKEN from environment")
@@ -107,16 +126,18 @@ class GitHubManager:
         token = self.load_token()
 
         # Set token in environment for gh CLI
+        env = None
         if token:
-            os.environ['GH_TOKEN'] = token
+            env = {'GH_TOKEN': token}
 
         # Check if we have valid auth
         try:
-            result = subprocess.run(
-                ['gh', 'auth', 'status'],
+            result = self.runner.gh(
+                ['auth', 'status'],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
+                env=env,
             )
 
             if result.returncode == 0:
@@ -167,12 +188,17 @@ class GitHubManager:
         self.logger.debug(f"Running: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(
+            env = None
+            token = self.load_token()
+            if token:
+                env = {'GH_TOKEN': token}
+            result = self.runner.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 check=check,
-                timeout=30
+                timeout=30,
+                env=env,
             )
             return result
 

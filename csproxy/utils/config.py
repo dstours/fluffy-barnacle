@@ -37,6 +37,7 @@ class _ConfigData:
     cloudflare_account_id: str = ""
     locations: List[str] = field(default_factory=list)
     codespace_names: List[str] = field(default_factory=list)
+    accounts: dict = field(default_factory=dict)
     profile: str = ""
     profiles: dict = field(default_factory=dict)
 
@@ -100,6 +101,7 @@ class Config:
         "cloudflare_account_id": "",
         "locations": [],
         "codespace_names": [],
+        "accounts": {},
         "profile": "",
         "profiles": {},
     }
