@@ -151,9 +151,10 @@ def build_server() -> FastMCP:
     def create_codespace(repo: Optional[str] = None, machine: str = "basicLinux32gb") -> dict:
         """Create a new GitHub Codespace (provisions real, billable infra).
 
-        repo defaults to auto-detecting from the current directory. machine
-        defaults to the smallest standard Linux machine; pass "" only with a TTY.
-        Returns {"name": <new codespace name>}.
+        repo defaults to ``github/codespaces-blank`` (GitHub's blank template — a
+        generic Ubuntu Codespace, which is what the SOCKS relay wants and works
+        with no local repo). machine defaults to the smallest standard Linux
+        machine; pass "" only with a TTY. Returns {"name": <new codespace name>}.
         """
         _, gh = _context()
         return gh.create_codespace(repo=repo, machine=machine)
