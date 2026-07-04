@@ -273,7 +273,9 @@ class GitHubManager:
         Create a new Codespace.
 
         Args:
-            repo: Repository to create Codespace from (default: auto-detect from cwd)
+            repo: Repository to create Codespace from (default: ``github/codespaces-blank``,
+                GitHub's blank template — a generic Ubuntu Codespace, which is exactly
+                what the SOCKS relay needs and works headlessly with no local repo)
             machine: Machine type (default: 'basicLinux32gb', the smallest standard
                 Linux machine). A concrete value is required: with no ``--machine``,
                 ``gh codespace create`` prompts interactively for it and fails with
@@ -292,11 +294,15 @@ class GitHubManager:
             ``--json`` flag — it prints the new codespace's name to stdout (status
             and billing banners go to stderr), so we read the name from stdout.
         """
+        # Default to GitHub's blank template repo. Without --repo, `gh codespace
+        # create` auto-detects from the cwd — which fails headlessly (the worker's
+        # cwd is not a Codespaces-enabled repo) and pushes callers to guess a repo
+        # name. The blank repo is exactly what a SOCKS relay needs (generic Ubuntu).
+        repo = repo or "github/codespaces-blank"
         args = ["codespace", "create"]
         if machine:
             args.extend(["--machine", machine])
-        if repo:
-            args.extend(["--repo", repo])
+        args.extend(["--repo", repo])
 
         self.logger.info(f"Creating new Codespace (machine: {machine or 'gh-default'})...")
         result = self.run_gh_command(args)

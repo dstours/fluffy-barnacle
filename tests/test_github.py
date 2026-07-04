@@ -59,13 +59,17 @@ def test_create_codespace_omits_machine_when_blank(tmp_path):
     assert "--machine" not in gh.runner.run.call_args.args[0]
 
 
-def test_create_codespace_omits_repo_when_none(tmp_path):
+def test_create_codespace_defaults_to_blank_repo_when_none(tmp_path):
+    # With no repo, `gh codespace create` would auto-detect from cwd and fail
+    # headlessly. Default to GitHub's blank template instead of guessing.
     gh = _gh(tmp_path)
-    gh.runner.run = MagicMock(return_value=_result(stdout="auto-detected-cs\n"))
+    gh.runner.run = MagicMock(return_value=_result(stdout="blank-cs\n"))
 
     gh.create_codespace()
 
-    assert "--repo" not in gh.runner.run.call_args.args[0]
+    cmd = gh.runner.run.call_args.args[0]
+    assert "--repo" in cmd
+    assert "github/codespaces-blank" in cmd
 
 
 def test_create_codespace_raises_when_no_name(tmp_path):
